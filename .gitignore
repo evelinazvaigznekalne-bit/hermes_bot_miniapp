@@ -1,0 +1,42 @@
+# Secrets - never commit
+.env
+*.env
+!.env.example
+# Rotated/backup copies of .env keep the same secrets — never commit them.
+# (Note: *.env does NOT match `.env.bak.123`; the pattern must be explicit.)
+.env.bak*
+.env.*.bak
+*.env.bak*
+.env.bak.*
+# Wallets / key material
+*.dat
+*.wallet
+wallet.dat
+
+# Logs and runtime state
+logs/
+*.log
+
+# User data: contains password hashes, session tokens, wallet keys.
+data/
+.run/
+
+# Local-only notes and snapshots
+memory_snapshot.md
+PROJECT_FILES.md
+
+# Stray editor backups (*.bak) — these are full-file copies of source
+*.bak
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,45 @@
+status_indicators:
+  wallet_data: ⏳        # ⏳ awaiting challenge/signature → ✓ verified / ✗ failed
+  assets_chains: ⏳      # ⏳ fetching → ✓ loaded / ✗ failed or not found
+  memepol_comparison: ⏳ # ⏳ evaluating → ✓ matched / ✗ no match or error
+  puzzle_hints: ⏳
+  puzzle_images: ⏳
+
+# Status vocabulary used consistently across the API, the bot and the logs.
+status_legend:
+  "✓": successfully loaded
+  "✗": failed or not found (error detail is recorded in logs/status.log)
+  "⏳": currently loading / awaiting user action
+
+# Puzzle verdict vocabulary (requirement 11). An address or balance existing
+# on its own is NEVER reported as a match.
+puzzle_verdicts:
+  exact_match: all required criteria satisfied (address + value thresholds)
+  possible_match: partial evidence; needs human review
+  no_match: evaluated, nothing matched
+  error: dataset unconfigured/unreachable — never reported as a match
+
+# Ownership verification.
+auth:
+  method: eip191_personal_sign
+  challenge_ttl_seconds: 300
+  single_use_nonce: true
+  secrets_requested: false   # never asks for a seed phrase or private key
+
+# Chain providers (add entries here + a provider class to extend).
+chains:
+  ethereum: { family: evm, native: ETH, explorer: "https://etherscan.io/address/{address}" }
+  polygon:  { family: evm, native: POL, explorer: "https://polygonscan.com/address/{address}" }
+  base:     { family: evm, native: ETH, explorer: "https://basescan.org/address/{address}" }
+  optimism: { family: evm, native: ETH, explorer: "https://optimistic.etherscan.io/address/{address}" }
+  arbitrum: { family: evm, native: ETH, explorer: "https://arbiscan.io/address/{address}" }
+  gnosis:   { family: evm, native: xDAI, explorer: "https://gnosisscan.io/address/{address}" }
+  bitcoin:  { family: bitcoin, native: BTC, explorer: "https://mempool.space/address/{address}" }
+
+# Hard boundaries enforced by the codebase.
+safety:
+  read_only: true
+  broadcasts_transactions: false
+  moves_funds: false
+  accepts_seed_phrases: false
+  accepts_private_keys: false

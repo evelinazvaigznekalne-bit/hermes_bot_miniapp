@@ -1,0 +1,28 @@
+# Runtime dependencies for the Telegram Hermes Bot Mini App.
+#
+# The backend is standard-library only (http.server, hmac, json) so the Mini
+# App runs on a bare Termux install. The packages below cover crypto address
+# validation, signature recovery and HTTP.
+#
+# Install (Termux):
+#   python3 -m pip install -r requirements.txt
+
+# --- HTTP (used by chain + MemePol clients) ---
+requests>=2.31,<3
+
+# --- EVM address checksums + EIP-191 signature recovery ---
+eth-keys>=0.5,<0.8
+pycryptodome>=3.19          # keccak256
+
+# --- ECDSA fallback / Bitcoin curve primitives ---
+coincurve>=18.0
+
+# --- Bitcoin address encoding ---
+base58>=2.1
+
+# --- Tests ---
+pytest>=8.0
+
+# --- Optional: only needed if you switch from the stdlib server to ASGI ---
+# fastapi>=0.110
+# uvicorn>=0.29
