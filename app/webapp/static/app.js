@@ -2135,5 +2135,11 @@
   }
 
   // Initialize onboarding flow (login first, then wallet, then main app)
-  initOnboarding();
+  try {
+    initOnboarding();
+  } catch (err) {
+    console.error("initOnboarding failed:", err);
+    const gate = el("onboarding-gate");
+    if (gate) gate.innerHTML = `<p style="color:red;padding:1rem;">Error: ${err.message}</p>`;
+  }
 })();
