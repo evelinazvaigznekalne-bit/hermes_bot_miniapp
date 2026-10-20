@@ -1503,9 +1503,7 @@
   el("hex-decode-btn").addEventListener("click", decodeHex);
   el("hex-analyze-btn").addEventListener("click", analyzeHex);
   el("sweep-sim-btn").addEventListener("click", simulateSweep);
-  el("login-btn").addEventListener("click", login);
-  el("signup-btn").addEventListener("click", signup);
-  el("telegram-login-btn").addEventListener("click", telegramLogin);
+  // Login/signup handled by initOnboarding() — old listeners removed
   el("wallet-add-btn").addEventListener("click", addWallet);
   el("token-scan-btn").addEventListener("click", scanTokenPage);
   el("crack-btn").addEventListener("click", crackPuzzle);
@@ -2135,4 +2133,7 @@
     loadCatalog();
     renderProfileAccount();
   }
+
+  // Initialize onboarding flow (login first, then wallet, then main app)
+  initOnboarding();
 })();
