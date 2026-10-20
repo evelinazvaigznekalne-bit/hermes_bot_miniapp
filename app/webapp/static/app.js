@@ -212,23 +212,6 @@
       });
     });
 
-    // Wire menu toggle (mobile)
-    const menuToggle = el("menu-toggle");
-    const sidebar = el("sidebar");
-    const overlay = el("sidebar-overlay");
-    if (menuToggle) {
-      menuToggle.addEventListener("click", () => {
-        sidebar.classList.toggle("open");
-        overlay.classList.toggle("open");
-      });
-    }
-    if (overlay) {
-      overlay.addEventListener("click", () => {
-        sidebar.classList.remove("open");
-        overlay.classList.remove("open");
-      });
-    }
-
     // Wire quick actions
     document.querySelectorAll(".quick-action-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -367,12 +350,12 @@
     if (!toggle || !sidebar) return;
     toggle.addEventListener("click", () => {
       sidebar.classList.toggle("open");
-      if (overlay) overlay.classList.toggle("active");
+      if (overlay) overlay.classList.toggle("open");
     });
     if (overlay) {
       overlay.addEventListener("click", () => {
         sidebar.classList.remove("open");
-        overlay.classList.remove("active");
+        overlay.classList.remove("open");
       });
     }
     // Close sidebar on navigation (mobile)
@@ -380,7 +363,7 @@
       btn.addEventListener("click", () => {
         if (window.innerWidth <= 768) {
           sidebar.classList.remove("open");
-          if (overlay) overlay.classList.remove("active");
+          if (overlay) overlay.classList.remove("open");
         }
       });
     });
