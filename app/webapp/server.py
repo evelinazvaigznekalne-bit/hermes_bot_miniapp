@@ -616,6 +616,93 @@ class MiniAppAPI:
         out["slug"] = slug
         return out
 
+    def puzzles_bitcoin_puzzle(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Bitcoin Puzzle Transaction solver."""
+        from ..puzzles.bitcoin_puzzle import (
+            identify_puzzle_address, estimate_keyspace, KNOWN_PUZZLES,
+        )
+
+        address = str(body.get("address") or "").strip()
+        if not address:
+            # Return known puzzles
+            return {
+                "known_puzzles": [
+                    {
+                        "address": addr,
+                        "puzzle_number": p.puzzle_number,
+                        "amount_btc": p.amount_btc,
+                        "block_height": p.block_height,
+                        "keyspace_range": [hex(p.keyspace_range[0]), hex(p.keyspace_range[1])],
+                        "description": p.description,
+                    }
+                    for addr, p in KNOWN_PUZZLES.items()
+                ],
+            }
+
+        puzzle = identify_puzzle_address(address)
+        if not puzzle:
+            return {"error": "not a known puzzle address", "address": address}
+
+        est = estimate_keyspace(*puzzle.keyspace_range)
+        return {
+            "address": address,
+            "puzzle_number": puzzle.puzzle_number,
+            "amount_btc": puzzle.amount_btc,
+            "block_height": puzzle.block_height,
+            "keyspace_range": [hex(puzzle.keyspace_range[0]), hex(puzzle.keyspace_range[1])],
+            "space_size": est["space_size"],
+            "bits": est.get("bits"),
+            "estimates": est.get("estimates", {}),
+            "feasible": est.get("feasible", False),
+        }
+
+    def web_sources(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Web research tool sources."""
+        from ..web_research import get_all_sources, search_tools
+
+        query = str(body.get("query") or "").strip()
+        if query:
+            results = search_tools(query)
+            return {
+                "query": query,
+                "results": [
+                    {
+                        "name": t.name,
+                        "source": t.source,
+                        "url": t.url,
+                        "description": t.description,
+                        "category": t.category,
+                        "free": t.free,
+                        "api_key_required": t.api_key_required,
+                    }
+                    for t in results
+                ],
+            }
+
+        sources = get_all_sources()
+        return {
+            "sources": [
+                {
+                    "name": s.name,
+                    "url": s.url,
+                    "description": s.description,
+                    "tools": [
+                        {
+                            "name": t.name,
+                            "source": t.source,
+                            "url": t.url,
+                            "description": t.description,
+                            "category": t.category,
+                            "free": t.free,
+                            "api_key_required": t.api_key_required,
+                        }
+                        for t in s.tools
+                    ],
+                }
+                for s in sources
+            ],
+        }
+
     def _raw_entry(self, slug: str) -> Optional[Dict[str, Any]]:
         """Find the raw corpus record behind a catalog slug."""
         for entry in self.service.catalog.public_entries:
@@ -964,6 +1051,12 @@ def make_handler(api: MiniAppAPI):
                                            extra_headers=self._rl_headers)
                 if path == "/api/puzzles/attack":
                     return self._send_json(api.puzzles_attack(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/puzzles/bitcoin-puzzle":
+                    return self._send_json(api.puzzles_bitcoin_puzzle(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/web-sources":
+                    return self._send_json(api.web_sources(body),
                                            extra_headers=self._rl_headers)
                 if path == "/api/auth/login":
                     return self._send_json(api.auth_login(body),

@@ -48,6 +48,9 @@
           <button class="sidebar-btn" data-page="crack">Crack</button>
           <button class="sidebar-btn" data-page="hints">Hints</button>
           <button class="sidebar-btn" data-page="image">Image Analysis</button>
+          <button class="sidebar-btn" data-page="bitcoin-puzzle">BTC Puzzle</button>
+          <button class="sidebar-btn" data-page="web-sources">Web Tools</button>
+          <button class="sidebar-btn" data-page="monitor">Monitor</button>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-title">Account</div>
@@ -631,6 +634,58 @@
             </p>
             <div id="hints-list">
               <p class="muted">Sign in to view hints.</p>
+            </div>
+          </section>
+        </div>
+
+        <!-- Bitcoin Puzzle page -->
+        <div class="page-section hidden" id="page-bitcoin-puzzle">
+          <section class="card">
+            <h2>Bitcoin Puzzle Transactions</h2>
+            <p class="muted">
+              The Bitcoin Puzzle is a series of transactions with unknown private keys
+              constrained to known ranges. Check if an address is a known puzzle.
+            </p>
+            <div class="row">
+              <input id="btc-puzzle-address" type="text" placeholder="Enter Bitcoin address…" spellcheck="false">
+              <button id="btc-puzzle-check-btn" class="primary">Check</button>
+            </div>
+            <p class="status" id="btc-puzzle-status"><span class="pill pending">⏳ idle</span></p>
+            <div id="btc-puzzle-results"></div>
+          </section>
+          <section class="card">
+            <h3>Known Puzzles</h3>
+            <div id="btc-puzzle-list">
+              <p class="muted">Loading…</p>
+            </div>
+          </section>
+        </div>
+
+        <!-- Web Sources page -->
+        <div class="page-section hidden" id="page-web-sources">
+          <section class="card">
+            <h2>Web Research Tools</h2>
+            <p class="muted">
+              Curated crypto investigation, cryptography, and security tool directories.
+            </p>
+            <div class="row">
+              <input id="web-sources-search" type="text" placeholder="Search tools…" spellcheck="false">
+              <button id="web-sources-search-btn" class="primary">Search</button>
+            </div>
+            <p class="status" id="web-sources-status"><span class="pill pending">⏳ idle</span></p>
+            <div id="web-sources-results"></div>
+          </section>
+        </div>
+
+        <!-- Monitor page -->
+        <div class="page-section hidden" id="page-monitor">
+          <section class="card">
+            <h2>Puzzle Monitor</h2>
+            <p class="muted">
+              Watches puzzle transactions for changes. Read-only, never moves funds.
+            </p>
+            <div id="monitor-status">
+              <p class="muted">Loading…</p>
             </div>
           </section>
         </div>

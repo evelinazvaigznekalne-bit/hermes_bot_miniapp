@@ -106,6 +106,14 @@ def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
         "  /image — image analysis info\n"
         "  /goal [text] — AI goal helper\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
+        "🧩 <b>Bitcoin Puzzle</b>\n"
+        "  /bitcoinpuzzle [address|estimate start end] — puzzle solver\n"
+        "    <i>Example: /bitcoinpuzzle 1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw</i>\n"
+        "    <i>Example: /bitcoinpuzzle estimate 0x8000 0xFFFF</i>\n"
+        "  /websources [query] — crypto tool directories\n"
+        "    <i>Example: /websources rsa</i>\n"
+        "  /monitor — puzzle monitoring status\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
         "🌐 <b>Web Research</b>\n"
         "  /archive &lt;url&gt; — archived copy (bypasses bot gates)\n"
         "  /ig &lt;post_url&gt; — Instagram post media URL\n\n"
@@ -327,6 +335,12 @@ class TelegramBot:
             reply = self._login_text()
         elif command == "/wallet":
             reply = self._wallet_text(chat_id)
+        elif command == "/bitcoinpuzzle":
+            reply = self._bitcoinpuzzle_text(args)
+        elif command == "/websources":
+            reply = self._websources_text(args)
+        elif command == "/monitor":
+            reply = self._monitor_text(args)
         else:
             reply = "Unknown command. Try /help"
 
@@ -899,6 +913,141 @@ class TelegramBot:
                     addr = f" <code>{html.escape(addr[:8])}…{html.escape(addr[-4:])}</code>"
                 lines.append(f"  • {html.escape(h.as_dict()['when'])} — /{html.escape(h.command)}{addr}")
         lines.append("\n<i>Open the Mini App for full wallet management.</i>")
+        return "\n".join(lines)
+
+    def _bitcoinpuzzle_text(self, args) -> str:
+        """Bitcoin Puzzle Transaction solver."""
+        from ..puzzles.bitcoin_puzzle import (
+            identify_puzzle_address, estimate_keyspace, KNOWN_PUZZLES,
+        )
+
+        if not args:
+            # Show known puzzles
+            lines = ["🧩 <b>Bitcoin Puzzle Transactions</b>", ""]
+            lines.append("Known puzzle addresses:")
+            for addr, puzzle in KNOWN_PUZZLES.items():
+                lines.append(f"  • Puzzle {puzzle.puzzle_number}: <code>{addr[:16]}…{addr[-8:]}</code>")
+                lines.append(f"    Range: 0x{puzzle.keyspace_range[0]:x} - 0x{puzzle.keyspace_range[1]:x}")
+                lines.append(f"    {puzzle.description}")
+                est = estimate_keyspace(*puzzle.keyspace_range)
+                if est.get("feasible"):
+                    lines.append(f"    Est: {est['estimates']['gpu_100M_s']} (GPU)")
+                else:
+                    lines.append(f"    Feasible: NO (too large)")
+                lines.append("")
+            lines.append("Usage: <code>/bitcoinpuzzle &lt;address&gt;</code>")
+            lines.append("Usage: <code>/bitcoinpuzzle estimate &lt;start_hex&gt; &lt;end_hex&gt;</code>")
+            return "\n".join(lines)
+
+        if args[0] == "estimate" and len(args) >= 3:
+            try:
+                start = int(args[1], 16)
+                end = int(args[2], 16)
+            except ValueError:
+                return "✗ invalid hex values"
+            est = estimate_keyspace(start, end)
+            if est.get("space_size", 0) == 0:
+                return f"✗ {est.get('message', 'invalid range')}"
+            lines = [
+                f"📊 <b>Keyspace estimate</b>",
+                f"Range: 0x{start:x} - 0x{end:x}",
+                f"Space size: {est['space_size']:,} ({est.get('bits', '?')} bits)",
+                "",
+                "<b>Estimated time to exhaust:</b>",
+            ]
+            for rate, duration in est.get("estimates", {}).items():
+                lines.append(f"  • {rate}: {duration}")
+            lines.append("")
+            if est.get("feasible"):
+                lines.append("<i>Feasible with GPU compute.</i>")
+            else:
+                lines.append("<i>NOT feasible with current technology.</i>")
+            return "\n".join(lines)
+
+        # Check if it's a known puzzle address
+        addr = args[0]
+        puzzle = identify_puzzle_address(addr)
+        if not puzzle:
+            lines = [
+                f"🔍 <b>Not a known puzzle address</b>",
+                f"Address: <code>{addr[:16]}…{addr[-8:]}</code>",
+                "",
+                "This address is not in the known Bitcoin Puzzle transaction list.",
+                "Use <code>/bitcoinpuzzle estimate &lt;start&gt; &lt;end&gt;</code> to check a keyspace.",
+            ]
+            return "\n".join(lines)
+
+        est = estimate_keyspace(*puzzle.keyspace_range)
+        lines = [
+            f"🧩 <b>Bitcoin Puzzle #{puzzle.puzzle_number}</b>",
+            f"Address: <code>{addr[:16]}…{addr[-8:]}</code>",
+            f"Amount: {puzzle.amount_btc} BTC",
+            f"Block: {puzzle.block_height}",
+            f"Range: 0x{puzzle.keyspace_range[0]:x} - 0x{puzzle.keyspace_range[1]:x}",
+            f"Space: {est['space_size']:,} keys ({est.get('bits', '?')} bits)",
+            "",
+            "<b>Estimated time to exhaust:</b>",
+        ]
+        for rate, duration in est.get("estimates", {}).items():
+            lines.append(f"  • {rate}: {duration}")
+        lines.append("")
+        if est.get("feasible"):
+            lines.append("<i>Feasible with GPU compute. Use external tools to scan.</i>")
+        else:
+            lines.append("<i>NOT feasible with current technology.</i>")
+        return "\n".join(lines)
+
+    def _websources_text(self, args) -> str:
+        """Show web research tool sources."""
+        from ..web_research import get_all_sources, search_tools
+
+        if args:
+            # Search for specific tools
+            query = " ".join(args)
+            results = search_tools(query)
+            lines = [f"🔍 <b>Tool search: {html.escape(query)}</b>", ""]
+            if results:
+                for t in results:
+                    lines.append(f"• <b>{html.escape(t.name)}</b> ({t.source})")
+                    lines.append(f"  {html.escape(t.description)}")
+                    lines.append(f"  <a href=\"{html.escape(t.url)}\">{html.escape(t.url)}</a>")
+                    lines.append("")
+            else:
+                lines.append("No tools found for that query.")
+            return "\n".join(lines)
+
+        # Show all sources
+        sources = get_all_sources()
+        lines = ["🌐 <b>Web Research Tool Sources</b>", ""]
+        for src in sources:
+            lines.append(f"<b>{html.escape(src.name)}</b>")
+            lines.append(f"  {html.escape(src.description)}")
+            lines.append(f"  <a href=\"{html.escape(src.url)}\">{html.escape(src.url)}</a>")
+            lines.append(f"  {len(src.tools)} tools available:")
+            for t in src.tools:
+                key_req = " [API key]" if t.api_key_required else ""
+                lines.append(f"    • {html.escape(t.name)} ({t.category}){key_req}")
+            lines.append("")
+        lines.append("Usage: <code>/websources &lt;query&gt;</code> to search tools")
+        return "\n".join(lines)
+
+    def _monitor_text(self, args) -> str:
+        """Puzzle monitoring status."""
+        lines = [
+            "📡 <b>Puzzle Monitoring</b>",
+            "",
+            "Active monitoring: <b>offline</b>",
+            "",
+            "The monitoring system tracks puzzle transactions and alerts when:",
+            "  • A puzzle address receives funds",
+            "  • A puzzle is solved (key found)",
+            "  • New puzzle transactions appear",
+            "",
+            "To enable monitoring, run:",
+            "  <code>python3 -m app.monitor</code>",
+            "",
+            "This will check puzzle statuses every 15 minutes and log to <code>logs/monitor.log</code>.",
+        ]
         return "\n".join(lines)
 
     def _scan_text(self, address: str) -> str:

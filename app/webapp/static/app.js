@@ -1235,6 +1235,10 @@
   el("token-scan-btn").addEventListener("click", scanToken);
   el("crack-btn").addEventListener("click", crackPuzzle);
   el("image-analyze-btn").addEventListener("click", analyzeImage);
+  el("btc-puzzle-check-btn").addEventListener("click", checkBtcPuzzle);
+  el("btc-puzzle-list").addEventListener("click", loadBtcPuzzleList);
+  el("web-sources-search-btn").addEventListener("click", searchWebSources);
+  el("monitor-status").addEventListener("click", loadMonitorStatus);
   el("seed-validate-btn").addEventListener("click", validateSeed);
   el("seed-derive-btn").addEventListener("click", deriveAddresses);
   el("market-scan-btn").addEventListener("click", scanToken);
@@ -1501,6 +1505,98 @@
       setStatus(status, "ok", "✓ crack attempt complete");
     } catch (err) {
       setStatus(status, "fail", `✗ ${err.message}`);
+    }
+  }
+
+  // ---- bitcoin puzzle page -----------------------------------------------
+  async function checkBtcPuzzle() {
+    const addr = el("btc-puzzle-address").value.trim();
+    const status = el("btc-puzzle-status");
+    const results = el("btc-puzzle-results");
+    if (!addr) { status.innerHTML = '<span class="pill pending">⏳ enter address</span>'; return; }
+    status.innerHTML = '<span class="pill pending">⏳ checking…</span>';
+    try {
+      const resp = await apiPost("/api/puzzles/bitcoin-puzzle", { address: addr });
+      if (resp.error) {
+        status.innerHTML = '<span class="pill fail">✗ not a known puzzle</span>';
+        results.innerHTML = `<p class="muted">${resp.error}</p>`;
+      } else {
+        status.innerHTML = '<span class="pill ok">✓ known puzzle</span>';
+        let html = `<p><b>Puzzle #${resp.puzzle_number}</b> — ${resp.amount_btc} BTC</p>`;
+        html += `<p class="muted">Range: ${resp.keyspace_range[0]} - ${resp.keyspace_range[1]}</p>`;
+        html += `<p class="muted">Space: ${resp.space_size.toLocaleString()} keys (${resp.bits} bits)</p>`;
+        html += `<p>Feasible: ${resp.feasible ? "yes" : "NO"}</p>`;
+        if (resp.estimates) {
+          html += '<p class="muted">Estimates: ';
+          for (const [k, v] of Object.entries(resp.estimates)) html += `${k}: ${v} `;
+          html += '</p>';
+        }
+        results.innerHTML = html;
+      }
+    } catch (err) {
+      status.innerHTML = '<span class="pill fail">✗ error</span>';
+      results.innerHTML = `<p class="muted">${err.message}</p>`;
+    }
+  }
+
+  async function loadBtcPuzzleList() {
+    const list = el("btc-puzzle-list");
+    try {
+      const resp = await apiGet("/api/puzzles/bitcoin-puzzle");
+      if (resp.known_puzzles && resp.known_puzzles.length > 0) {
+        let html = '';
+        for (const p of resp.known_puzzles) {
+          html += `<div class="list-item"><b>Puzzle #${p.puzzle_number}</b>`;
+          html += ` <code>${p.address.slice(0,16)}…${p.address.slice(-8)}</code><br>`;
+          html += `<span class="muted">${p.amount_btc} BTC · Block ${p.block_height}</span><br>`;
+          html += `<span class="muted">${p.description}</span></div>`;
+        }
+        list.innerHTML = html;
+      } else {
+        list.innerHTML = '<p class="muted">No known puzzles.</p>';
+      }
+    } catch (err) {
+      list.innerHTML = `<p class="muted">${err.message}</p>`;
+    }
+  }
+
+  async function searchWebSources() {
+    const q = el("web-sources-search").value.trim();
+    const status = el("web-sources-status");
+    const results = el("web-sources-results");
+    if (!q) { status.innerHTML = '<span class="pill pending">⏳ enter query</span>'; return; }
+    status.innerHTML = '<span class="pill pending">⏳ searching…</span>';
+    try {
+      const resp = await apiPost("/api/web-sources", { query: q });
+      if (resp.results && resp.results.length > 0) {
+        status.innerHTML = `<span class="pill ok">✓ ${resp.results.length} found</span>`;
+        let html = '';
+        for (const t of resp.results) {
+          html += `<div class="list-item"><b>${escHtml(t.name)}</b> <span class="muted">(${t.source})</span><br>`;
+          html += `<span class="muted">${escHtml(t.description)}</span><br>`;
+          html += `<a href="${escAttr(t.url)}" target="_blank">${escHtml(t.url)}</a>`;
+          if (t.api_key_required) html += ' <span class="pill pending">API key</span>';
+          html += '</div>';
+        }
+        results.innerHTML = html;
+      } else {
+        status.innerHTML = '<span class="pill fail">✗ no results</span>';
+        results.innerHTML = '<p class="muted">No tools found.</p>';
+      }
+    } catch (err) {
+      status.innerHTML = '<span class="pill fail">✗ error</span>';
+      results.innerHTML = `<p class="muted">${err.message}</p>`;
+    }
+  }
+
+  async function loadMonitorStatus() {
+    const el2 = el("monitor-status");
+    try {
+      const resp = await apiGet("/api/status");
+      el2.innerHTML = `<p>Watching <b>${resp.chains ? resp.chains.length : 0}</b> chains</p>`;
+      el2.innerHTML += '<p class="muted">Puzzle monitoring is offline. Run <code>python3 -m app.monitor</code> to enable.</p>';
+    } catch (err) {
+      el2.innerHTML = `<p class="muted">${err.message}</p>`;
     }
   }
 
