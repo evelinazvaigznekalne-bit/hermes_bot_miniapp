@@ -8,61 +8,132 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div class="toast-container" id="toast-container"></div>
-  <div class="sidebar-overlay" id="sidebar-overlay"></div>
-  <main class="app">
+  <!-- Onboarding gate: login first -->
+  <div id="onboarding-gate" class="onboarding-gate">
+    <div class="onboarding-card">
+      <div class="onboarding-logo">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <circle cx="24" cy="24" r="22" stroke="var(--accent)" stroke-width="2" opacity="0.3"/>
+          <path d="M24 8 L36 16 L36 32 L24 40 L12 32 L12 16 Z" stroke="var(--accent)" stroke-width="2" fill="none"/>
+          <circle cx="24" cy="24" r="6" fill="var(--accent)"/>
+        </svg>
+      </div>
+      <h1 class="onboarding-title">Hermes Wallet Inspector</h1>
+      <p class="onboarding-subtitle">Read-only public wallet data. Never asks for seed or key.</p>
+
+      <div class="onboarding-tabs">
+        <button class="onboarding-tab active" data-tab="login">Login</button>
+        <button class="onboarding-tab" data-tab="signup">Sign Up</button>
+      </div>
+
+      <div class="onboarding-form" id="onboarding-login">
+        <input id="login-email" type="email" placeholder="Email address" autocomplete="email" />
+        <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
+        <button id="login-btn" class="btn-primary">Login</button>
+        <button id="telegram-login-btn" class="btn-ghost">Login with Telegram</button>
+      </div>
+
+      <div class="onboarding-form hidden" id="onboarding-signup">
+        <input id="signup-email" type="email" placeholder="Email address" autocomplete="email" />
+        <input id="signup-password" type="password" placeholder="Password (min 8 chars)" autocomplete="new-password" />
+        <input id="signup-confirm" type="password" placeholder="Confirm password" autocomplete="new-password" />
+        <button id="signup-btn" class="btn-primary">Create Account</button>
+      </div>
+
+      <p class="onboarding-status" id="onboarding-status"></p>
+    </div>
+  </div>
+
+  <!-- Wallet connection step (after login) -->
+  <div id="wallet-gate" class="onboarding-gate hidden">
+    <div class="onboarding-card">
+      <div class="onboarding-logo">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect x="8" y="12" width="32" height="24" rx="4" stroke="var(--accent)" stroke-width="2" fill="none"/>
+          <circle cx="34" cy="24" r="3" fill="var(--accent)"/>
+        </svg>
+      </div>
+      <h2 class="onboarding-title">Connect Wallet</h2>
+      <p class="onboarding-subtitle">Optional — prove wallet ownership by signing a challenge. Free, off-chain, moves no funds.</p>
+
+      <div class="onboarding-form">
+        <input id="wallet-address" type="text" spellcheck="false" placeholder="0x… (EVM address)" />
+        <button id="wallet-connect-btn" class="btn-primary">Connect &amp; Sign</button>
+        <button id="wallet-skip-btn" class="btn-ghost">Skip for now</button>
+      </div>
+
+      <div id="wallet-challenge-area" class="hidden">
+        <pre id="wallet-challenge-box" class="challenge-box hidden"></pre>
+        <div class="row" id="wallet-challenge-actions">
+          <button id="wallet-challenge-copy-btn" class="btn-ghost btn-sm">Copy message</button>
+          <span id="wallet-challenge-nonce" class="muted"></span>
+        </div>
+        <input id="wallet-signature-input" type="text" spellcheck="false" placeholder="paste signature (0x…)" />
+        <button id="wallet-verify-btn" class="btn-primary">Verify</button>
+      </div>
+
+      <p class="onboarding-status" id="wallet-gate-status"></p>
+    </div>
+  </div>
+
+  <!-- Main app (after login + optional wallet) -->
+  <div id="main-app" class="main-app hidden">
+    <div class="toast-container" id="toast-container"></div>
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
     <!-- Top bar -->
     <div class="topbar">
       <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu">☰</button>
-      <div class="topbar-brand">hermes</div>
+      <div class="topbar-brand">
+        <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+          <path d="M24 8 L36 16 L36 32 L24 40 L12 32 L12 16 Z" stroke="var(--accent)" stroke-width="3" fill="none"/>
+          <circle cx="24" cy="24" r="6" fill="var(--accent)"/>
+        </svg>
+        <span>hermes</span>
+      </div>
       <div class="topbar-search">
-        <input id="topbar-search" type="text" placeholder="Search puzzles, tokens, addresses…" spellcheck="false" />
+        <input id="topbar-search" type="text" placeholder="Search…" spellcheck="false" />
       </div>
       <div class="topbar-actions">
-        <div class="topbar-balance">
-          <span class="muted">Balance</span>
-          <strong id="topbar-balance">$0.00</strong>
+        <div class="topbar-user" id="topbar-user">
+          <span class="muted" id="topbar-user-label">Guest</span>
         </div>
-        <button id="topbar-topup" class="ghost btn-sm">Top up</button>
+        <button id="topbar-logout" class="btn-ghost btn-sm">Logout</button>
       </div>
     </div>
 
     <div class="page-layout">
       <!-- Sidebar -->
-      <nav class="sidebar">
+      <nav class="sidebar" id="sidebar">
         <div class="sidebar-group">
           <div class="sidebar-group-title">Main</div>
           <button class="sidebar-btn active" data-page="dashboard">Dashboard</button>
-          <button class="sidebar-btn" data-page="catalog">Catalog</button>
-          <button class="sidebar-btn" data-page="market">Market</button>
-        </div>
-        <div class="sidebar-group">
-          <div class="sidebar-group-title">Wallet</div>
-          <button class="sidebar-btn" data-page="login">Login</button>
-          <button class="sidebar-btn" data-page="wallet">My Wallets</button>
-          <button class="sidebar-btn" data-page="seed">Seed Tools</button>
-          <button class="sidebar-btn" data-page="token">Token Scan</button>
+          <button class="sidebar-btn" data-page="catalog">Puzzle Catalog</button>
+          <button class="sidebar-btn" data-page="market">Market Scanner</button>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-title">Puzzles</div>
           <button class="sidebar-btn" data-page="crack">Crack</button>
           <button class="sidebar-btn" data-page="hints">Hints</button>
-          <button class="sidebar-btn" data-page="image">Image Analysis</button>
           <button class="sidebar-btn" data-page="bitcoin-puzzle">BTC Puzzle</button>
+          <button class="sidebar-btn" data-page="image">Image Analysis</button>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">Wallet</div>
+          <button class="sidebar-btn" data-page="wallet">My Wallets</button>
+          <button class="sidebar-btn" data-page="seed">Seed Tools</button>
+          <button class="sidebar-btn" data-page="token">Token Scan</button>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-group-title">Tools</div>
+          <button class="sidebar-btn" data-page="tools">File &amp; Hex</button>
           <button class="sidebar-btn" data-page="web-sources">Web Tools</button>
-          <button class="sidebar-btn" data-page="monitor">Monitor</button>
+          <button class="sidebar-btn" data-page="research">Research</button>
         </div>
         <div class="sidebar-group">
           <div class="sidebar-group-title">Account</div>
           <button class="sidebar-btn" data-page="profile">Profile</button>
           <button class="sidebar-btn" data-page="security">Security</button>
-          <button class="sidebar-btn" data-page="research">Research</button>
-          <button class="sidebar-btn" data-page="api">API</button>
-        </div>
-        <div class="sidebar-group">
-          <div class="sidebar-group-title">Resources</div>
-          <button class="sidebar-btn" data-page="tools">Tools</button>
-          <button class="sidebar-btn" data-page="resources">Links</button>
           <button class="sidebar-btn" data-page="help">Help</button>
         </div>
       </nav>
@@ -72,39 +143,43 @@
         <!-- Dashboard -->
         <div class="page-section" id="page-dashboard">
           <header class="head">
-            <h1>Hermes Wallet Inspector</h1>
-            <p class="sub">Read-only public wallet data</p>
+            <h1>Dashboard</h1>
+            <p class="sub">Your wallet inspection overview</p>
           </header>
 
-          <!-- Stats grid -->
           <div class="stats-grid" id="dashboard-stats-grid">
             <div class="stat-card">
+              <div class="stat-icon">🔍</div>
               <div class="stat-label">Total Scans</div>
               <div class="stat-value" id="dashboard-stat-total-scans">0</div>
             </div>
             <div class="stat-card">
+              <div class="stat-icon">🧩</div>
               <div class="stat-label">Puzzles Found</div>
               <div class="stat-value" id="dashboard-stat-puzzles-found">0</div>
             </div>
             <div class="stat-card">
+              <div class="stat-icon">📊</div>
               <div class="stat-label">Tracked</div>
               <div class="stat-value" id="dashboard-stat-tracked">0</div>
             </div>
             <div class="stat-card">
+              <div class="stat-icon">⭐</div>
               <div class="stat-label">Tier</div>
               <div class="stat-value" id="dashboard-stat-tier">anonymous</div>
             </div>
           </div>
 
-          <!-- Quick actions -->
-          <div class="quick-actions" id="dashboard-quick-actions">
-            <button class="quick-action-btn" data-action="scan">Scan Token</button>
-            <button class="quick-action-btn" data-action="catalog">Browse Catalog</button>
-            <button class="quick-action-btn" data-action="secret">Secret Check</button>
-            <button class="quick-action-btn" data-action="profile">View Profile</button>
+          <div class="card">
+            <h2>Quick Actions</h2>
+            <div class="quick-actions">
+              <button class="quick-action-btn" data-action="scan">Scan Token</button>
+              <button class="quick-action-btn" data-action="catalog">Browse Catalog</button>
+              <button class="quick-action-btn" data-action="secret">Secret Check</button>
+              <button class="quick-action-btn" data-action="profile">View Profile</button>
+            </div>
           </div>
 
-          <!-- Recent activity -->
           <div class="card">
             <h2>Recent Activity</h2>
             <div id="dashboard-recent-activity">
@@ -127,20 +202,17 @@
             <div class="row">
               <input id="address-input" type="text" spellcheck="false"
                      placeholder="0x… (EVM address)" />
-              <button id="connect-btn" class="primary">Connect &amp; sign</button>
+              <button id="connect-btn" class="btn-primary">Connect &amp; sign</button>
             </div>
-            <div class="row" style="margin-top: 8px;">
-              <button id="telegram-sign-btn" class="ghost">Login with personal_sign</button>
-            </div>
-            <pre id="challenge-box" class="challenge hidden"></pre>
-            <div id="challenge-actions" class="row hidden" style="margin-top: 4px;">
-              <button id="challenge-copy-btn" class="ghost btn-sm">Copy message</button>
+            <pre id="challenge-box" class="challenge-box hidden"></pre>
+            <div id="challenge-actions" class="row hidden">
+              <button id="challenge-copy-btn" class="btn-ghost btn-sm">Copy message</button>
               <span id="challenge-nonce" class="muted"></span>
             </div>
-            <div id="manual-sig-row" class="row hidden" style="margin-top: 8px;">
+            <div id="manual-sig-row" class="row hidden">
               <input id="manual-sig-input" type="text" spellcheck="false"
                      placeholder="paste signature (0x…)" />
-              <button id="manual-sig-submit" class="primary">Submit signature</button>
+              <button id="manual-sig-submit" class="btn-primary">Submit signature</button>
             </div>
             <p class="status" id="auth-status"><span class="pill pending">⏳ idle</span></p>
           </section>
@@ -150,15 +222,13 @@
             <div class="row">
               <label class="check">
                 <input type="checkbox" id="puzzles-toggle" />
-                Compare with authorized MemePol puzzle data
+                Compare with puzzle data
               </label>
-              <button id="refresh-btn" class="ghost">Refresh</button>
+              <button id="refresh-btn" class="btn-ghost">Refresh</button>
             </div>
             <p class="status" id="assets-status"><span class="pill pending">⏳ idle</span></p>
             <table id="assets-table" class="hidden">
-              <thead>
-                <tr><th>Asset</th><th>Amount</th><th>Kind</th></tr>
-              </thead>
+              <thead><tr><th>Asset</th><th>Amount</th><th>Kind</th></tr></thead>
               <tbody></tbody>
             </table>
             <div id="puzzle-panel" class="hidden">
@@ -169,41 +239,26 @@
             </div>
           </section>
 
-          <section class="card hidden" id="paypal-card">
-            <h2>Upgrade to full corpus</h2>
-            <p class="muted">
-              Your current tier: <strong id="current-tier">anonymous</strong>.
-              Paid tiers unlock the full public puzzle corpus.
-            </p>
-            <div id="paypal-plans" class="plans"></div>
-            <div id="paypal-buttons"></div>
-            <p class="status" id="paypal-status"><span class="pill pending">⏳ idle</span></p>
-            <div id="paypal-results"></div>
-          </section>
-
           <section class="card">
             <h2>Secret check</h2>
             <p class="muted">
-              Paste anything here to check whether it looks like a private key, seed
+              Paste anything to check whether it looks like a private key, seed
               phrase, or API token. Matches are
-              <strong>never stored, logged, or sent anywhere</strong> — only a masked
-              preview comes back.
+              <strong>never stored, logged, or sent anywhere</strong>.
             </p>
             <textarea id="scan-input" rows="4" spellcheck="false"
               placeholder="paste text to check (nothing is saved)"></textarea>
-            <button id="scan-btn" class="ghost">Check for secrets</button>
+            <button id="scan-btn" class="btn-ghost">Check for secrets</button>
             <p class="status" id="scan-status"><span class="pill pending">⏳ idle</span></p>
             <div id="scan-results"></div>
           </section>
 
           <section class="card">
             <h2>Subsystem status</h2>
-            <table id="status-table">
-              <tbody></tbody>
-            </table>
+            <table id="status-table"><tbody></tbody></table>
             <p class="legend">
               <span class="pill ok">OK</span> loaded
-              <span class="pill fail">FAIL</span> failed / not found
+              <span class="pill fail">FAIL</span> failed
               <span class="pill pending">PENDING</span> loading
             </p>
           </section>
@@ -212,13 +267,10 @@
         <!-- Catalog page -->
         <div class="page-section hidden" id="page-catalog">
           <section class="card" id="catalog-card">
-            <h2>Puzzle catalog</h2>
-            <p class="muted">
-              Public open-crypto-puzzles corpus. Free tier shows a sample;
-              paid tiers unlock the full catalog.
-            </p>
+            <h2>Puzzle Catalog</h2>
+            <p class="muted">Public open-crypto-puzzles corpus. Free tier shows a sample; paid tiers unlock the full catalog.</p>
             <div class="row">
-              <button id="catalog-btn" class="ghost">Load catalog</button>
+              <button id="catalog-btn" class="btn-ghost">Load catalog</button>
               <select id="catalog-category" class="hidden">
                 <option value="">All chains</option>
               </select>
@@ -231,17 +283,12 @@
             <div id="catalog-items"></div>
             <div id="catalog-detail" class="hidden"></div>
           </section>
-
           <section class="card" id="inventory-card">
-            <h2>File inventory</h2>
-            <p class="muted">
-              Metadata only — <strong>no file contents are ever read</strong>.
-              Identifiers in filenames (wallet addresses, onion hosts, long hex) are
-              masked by default. Requires the owner tier.
-            </p>
+            <h2>File Inventory</h2>
+            <p class="muted">Metadata only — no file contents are ever read.</p>
             <div class="row">
-              <button id="inv-btn" class="ghost">Load inventory</button>
-              <button id="inv-listing-btn" class="ghost">Show listing</button>
+              <button id="inv-btn" class="btn-ghost">Load inventory</button>
+              <button id="inv-listing-btn" class="btn-ghost">Show listing</button>
             </div>
             <p class="status" id="inv-status"><span class="pill pending">⏳ idle</span></p>
             <div id="inv-summary" class="hidden"></div>
@@ -256,26 +303,24 @@
             <h1>Market Scanner</h1>
             <p class="sub">Token analysis and scam detection</p>
           </header>
-
           <section class="card">
             <h2>Token Scanner</h2>
             <p class="muted">Enter a token address or symbol to scan.</p>
             <div class="row">
               <input id="market-scanner-input" type="text" spellcheck="false"
                      placeholder="0x… or token symbol" />
-              <button id="market-scan-btn" class="primary">Scan</button>
+              <button id="market-scan-btn" class="btn-primary">Scan</button>
             </div>
             <p class="status" id="market-scan-status"><span class="pill pending">⏳ idle</span></p>
             <div id="market-scan-results"></div>
           </section>
-
           <section class="card">
             <h2>Scam Detection</h2>
             <p class="muted">Check if a token address is associated with known scams.</p>
             <div class="row">
               <input id="market-scam-input" type="text" spellcheck="false"
                      placeholder="0x… token address" />
-              <button id="market-scam-btn" class="ghost">Check</button>
+              <button id="market-scam-btn" class="btn-ghost">Check</button>
             </div>
             <p class="status" id="market-scam-status"><span class="pill pending">⏳ idle</span></p>
             <div id="market-scam-results"></div>
@@ -336,7 +381,6 @@
             <h1>Security</h1>
             <p class="sub">Session, tokens, and access control</p>
           </header>
-
           <section class="card">
             <h2>Session overview</h2>
             <div class="profile-row"><span class="profile-label">Session active</span><span class="profile-value" id="security-session-active">—</span></div>
@@ -345,14 +389,12 @@
             <div class="profile-row"><span class="profile-label">Signature type</span><span class="profile-value" id="security-signature-type">—</span></div>
             <div class="profile-row"><span class="profile-label">Rate limit</span><span class="profile-value">30 req/min</span></div>
           </section>
-
           <section class="card">
             <h2>Access log</h2>
             <div id="security-access-log">
               <p class="muted">No access history available.</p>
             </div>
           </section>
-
           <section class="card">
             <h2>Security best practices</h2>
             <ul class="security-tips">
@@ -365,30 +407,26 @@
           </section>
         </div>
 
-        <!-- Security Research page -->
+        <!-- Research page -->
         <div class="page-section hidden" id="page-research">
           <header class="head">
             <h1>Security Research</h1>
             <p class="sub">Bug bounty methodology + opportunity scanner</p>
           </header>
-
           <section class="card">
             <h2>Research Workflow</h2>
             <p class="muted">A structured approach to finding and reporting bugs.</p>
             <div id="research-workflow"></div>
           </section>
-
           <section class="card">
             <h2>Open Opportunities</h2>
             <p class="muted">Live bounty programs from Cantina, Immunefi, Sherlock, Superteam.</p>
             <div id="research-opportunities"></div>
           </section>
-
           <section class="card">
             <h2>Common Pitfalls</h2>
             <ul class="security-tips" id="research-pitfalls"></ul>
           </section>
-
           <section class="card">
             <h2>Data Sources</h2>
             <div id="research-sources"></div>
@@ -399,10 +437,7 @@
         <div class="page-section hidden" id="page-api">
           <section class="card" id="api-card">
             <h2>For developers</h2>
-            <p class="muted">
-              Programmatic access to wallet inspection, puzzle catalog, and secret scanning.
-              All endpoints are read-only. Authentication uses EIP-191 signatures.
-            </p>
+            <p class="muted">Programmatic access to wallet inspection, puzzle catalog, and secret scanning. All endpoints are read-only.</p>
             <div id="api-docs"></div>
           </section>
         </div>
@@ -433,75 +468,37 @@
         <div class="page-section hidden" id="page-tools">
           <section class="card">
             <h2>File analyzer</h2>
-            <p class="muted">
-              Load and analyze wallet files, hex data, or encrypted blobs from local storage.
-              All processing is client-side — nothing is uploaded.
-            </p>
+            <p class="muted">Load and analyze wallet files, hex data, or encrypted blobs. All processing is client-side.</p>
             <div class="row">
               <input id="file-path-input" type="text" spellcheck="false"
                      placeholder="~/wallet.dat or /path/to/file">
-              <button id="file-load-btn" class="ghost">Load file</button>
+              <button id="file-load-btn" class="btn-ghost">Load file</button>
             </div>
             <p class="status" id="file-status"><span class="pill pending">⏳ idle</span></p>
             <div id="file-results"></div>
           </section>
-
           <section class="card">
             <h2>Hex decoder</h2>
-            <p class="muted">
-              Decode hex strings, base64, or encrypted data. Detects encoding and attempts decryption.
-            </p>
+            <p class="muted">Decode hex strings, base64, or encrypted data.</p>
             <textarea id="hex-input" rows="3" spellcheck="false"
               placeholder="paste hex, base64, or encrypted data"></textarea>
             <div class="row">
-              <button id="hex-decode-btn" class="ghost">Decode</button>
-              <button id="hex-analyze-btn" class="ghost">Analyze</button>
+              <button id="hex-decode-btn" class="btn-ghost">Decode</button>
+              <button id="hex-analyze-btn" class="btn-ghost">Analyze</button>
             </div>
             <p class="status" id="hex-status"><span class="pill pending">⏳ idle</span></p>
             <div id="hex-results"></div>
           </section>
-
           <section class="card">
             <h2>Sweep simulator</h2>
-            <p class="muted">
-              Simulate sweeping funds from a puzzle wallet. Shows the steps without executing anything.
-            </p>
+            <p class="muted">Simulate sweeping funds from a puzzle wallet. Shows the steps without executing anything.</p>
             <div class="row">
-              <input id="sweep-address-input" type="text" spellcheck="false"
-                     placeholder="puzzle address">
-              <input id="sweep-dest-input" type="text" spellcheck="false"
-                     placeholder="destination address">
-              <button id="sweep-sim-btn" class="ghost">Simulate</button>
+              <input id="sweep-address-input" type="text" spellcheck="false" placeholder="puzzle address">
+              <input id="sweep-dest-input" type="text" spellcheck="false" placeholder="destination address">
+              <button id="sweep-sim-btn" class="btn-ghost">Simulate</button>
             </div>
             <p class="status" id="sweep-status"><span class="pill pending">⏳ idle</span></p>
             <div id="sweep-results"></div>
-          </section>
-        </div>
-
-        <!-- Login page -->
-        <div class="page-section hidden" id="page-login">
-          <section class="card">
-            <h2>Login / Sign Up</h2>
-            <p class="muted">
-              Create an account to save your wallet, track puzzles, and access premium features.
-            </p>
-            <div class="row">
-              <input id="login-email" type="email" placeholder="Email address">
-              <input id="login-password" type="password" placeholder="Password">
-              <button id="login-btn" class="primary">Login</button>
-              <button id="signup-btn" class="ghost">Sign Up</button>
-            </div>
-            <p class="status" id="login-status"><span class="pill pending">⏳ idle</span></p>
-            <div id="login-results"></div>
-          </section>
-
-          <section class="card">
-            <h2>Quick Login with Telegram</h2>
-            <p class="muted">
-              Use your Telegram account to login instantly. No password needed.
-            </p>
-            <button id="telegram-login-btn" class="primary">Login with Telegram</button>
-            <p class="status" id="telegram-login-status"><span class="pill pending">⏳ idle</span></p>
           </section>
         </div>
 
@@ -509,18 +506,15 @@
         <div class="page-section hidden" id="page-wallet">
           <section class="card">
             <h2>My Wallets</h2>
-            <p class="muted">
-              Add and manage your wallets. All data is stored locally on your device.
-            </p>
+            <p class="muted">Add and manage your wallets. All data is stored locally.</p>
             <div class="row">
               <input id="wallet-address-input" type="text" placeholder="0x… or bc1…">
               <input id="wallet-label-input" type="text" placeholder="Label (e.g. Main Wallet)">
-              <button id="wallet-add-btn" class="primary">Add Wallet</button>
+              <button id="wallet-add-btn" class="btn-primary">Add Wallet</button>
             </div>
             <p class="status" id="wallet-status"><span class="pill pending">⏳ idle</span></p>
             <div id="wallet-list"></div>
           </section>
-
           <section class="card">
             <h2>Wallet Balances</h2>
             <div id="wallet-balances">
@@ -535,72 +529,59 @@
             <h1>Seed Tools</h1>
             <p class="sub">BIP39 validation and address derivation</p>
           </header>
-
           <section class="card">
             <h2>Validate Seed Phrase</h2>
-            <p class="muted">
-              Check if a BIP39 mnemonic is valid (wordlist + checksum).
-              The phrase is sent to the server for validation and is never stored.
-            </p>
+            <p class="muted">Check if a BIP39 mnemonic is valid (wordlist + checksum). Never stored.</p>
             <textarea id="seed-phrase-input" rows="3" spellcheck="false"
               placeholder="enter 12 or 24 word seed phrase"></textarea>
             <div class="row">
-              <button id="seed-validate-btn" class="primary">Validate</button>
+              <button id="seed-validate-btn" class="btn-primary">Validate</button>
             </div>
             <p class="status" id="seed-validate-status"><span class="pill pending">⏳ idle</span></p>
             <div id="seed-validate-results"></div>
           </section>
-
           <section class="card">
             <h2>Derive Addresses</h2>
-            <p class="muted">
-              Derive BTC and ETH addresses from a BIP39 seed phrase.
-              Uses standard BIP44 derivation paths.
-            </p>
+            <p class="muted">Derive BTC and ETH addresses from a BIP39 seed phrase.</p>
             <textarea id="seed-derive-phrase-input" rows="3" spellcheck="false"
               placeholder="enter seed phrase"></textarea>
             <input id="seed-passphrase-input" type="text" spellcheck="false"
-                   placeholder="passphrase (optional, default: none)">
+                   placeholder="passphrase (optional)">
             <div class="row">
-              <button id="seed-derive-btn" class="primary">Derive</button>
+              <button id="seed-derive-btn" class="btn-primary">Derive</button>
             </div>
             <p class="status" id="seed-derive-status"><span class="pill pending">⏳ idle</span></p>
             <div id="seed-derive-results"></div>
           </section>
         </div>
 
-        <!-- Token Recognition page -->
+        <!-- Token Scan page -->
         <div class="page-section hidden" id="page-token">
           <section class="card">
-            <h2>Token & Asset Recognition</h2>
-            <p class="muted">
-              Enter a token address or symbol to identify it and check for scams.
-            </p>
+            <h2>Token &amp; Asset Recognition</h2>
+            <p class="muted">Enter a token address or symbol to identify it and check for scams.</p>
             <div class="row">
               <input id="token-input" type="text" placeholder="0x… or token symbol">
-              <button id="token-scan-btn" class="primary">Scan Token</button>
+              <button id="token-scan-btn" class="btn-primary">Scan Token</button>
             </div>
             <p class="status" id="token-status"><span class="pill pending">⏳ idle</span></p>
             <div id="token-results"></div>
           </section>
         </div>
 
-        <!-- Puzzle Crack page -->
+        <!-- Crack page -->
         <div class="page-section hidden" id="page-crack">
           <section class="card">
             <h2>Puzzle Crack</h2>
-            <p class="muted">
-              Attempt to crack a puzzle by entering a password or key. All processing is local.
-            </p>
+            <p class="muted">Attempt to crack a puzzle by entering a password or key. All processing is local.</p>
             <div class="row">
               <input id="crack-puzzle-input" type="text" placeholder="Puzzle ID or address">
               <input id="crack-password-input" type="text" placeholder="Password or key">
-              <button id="crack-btn" class="primary">Crack</button>
+              <button id="crack-btn" class="btn-primary">Crack</button>
             </div>
             <p class="status" id="crack-status"><span class="pill pending">⏳ idle</span></p>
             <div id="crack-results"></div>
           </section>
-
           <section class="card">
             <h2>Crack History</h2>
             <div id="crack-history">
@@ -613,12 +594,10 @@
         <div class="page-section hidden" id="page-image">
           <section class="card">
             <h2>Image Analysis</h2>
-            <p class="muted">
-              Upload an image to analyze it for hidden data, steganography, or puzzle clues.
-            </p>
+            <p class="muted">Upload an image to analyze it for hidden data, steganography, or puzzle clues.</p>
             <div class="row">
               <input id="image-input" type="file" accept="image/*">
-              <button id="image-analyze-btn" class="primary">Analyze</button>
+              <button id="image-analyze-btn" class="btn-primary">Analyze</button>
             </div>
             <p class="status" id="image-status"><span class="pill pending">⏳ idle</span></p>
             <div id="image-results"></div>
@@ -629,9 +608,7 @@
         <div class="page-section hidden" id="page-hints">
           <section class="card">
             <h2>Puzzle Hints</h2>
-            <p class="muted">
-              Browse hints for all puzzles. Sign in to unlock premium hints.
-            </p>
+            <p class="muted">Browse hints for all puzzles. Sign in to unlock premium hints.</p>
             <div id="hints-list">
               <p class="muted">Sign in to view hints.</p>
             </div>
@@ -642,13 +619,10 @@
         <div class="page-section hidden" id="page-bitcoin-puzzle">
           <section class="card">
             <h2>Bitcoin Puzzle Transactions</h2>
-            <p class="muted">
-              The Bitcoin Puzzle is a series of transactions with unknown private keys
-              constrained to known ranges. Check if an address is a known puzzle.
-            </p>
+            <p class="muted">The Bitcoin Puzzle is a series of transactions with unknown private keys constrained to known ranges.</p>
             <div class="row">
               <input id="btc-puzzle-address" type="text" placeholder="Enter Bitcoin address…" spellcheck="false">
-              <button id="btc-puzzle-check-btn" class="primary">Check</button>
+              <button id="btc-puzzle-check-btn" class="btn-primary">Check</button>
             </div>
             <p class="status" id="btc-puzzle-status"><span class="pill pending">⏳ idle</span></p>
             <div id="btc-puzzle-results"></div>
@@ -665,12 +639,10 @@
         <div class="page-section hidden" id="page-web-sources">
           <section class="card">
             <h2>Web Research Tools</h2>
-            <p class="muted">
-              Curated crypto investigation, cryptography, and security tool directories.
-            </p>
+            <p class="muted">Curated crypto investigation, cryptography, and security tool directories.</p>
             <div class="row">
               <input id="web-sources-search" type="text" placeholder="Search tools…" spellcheck="false">
-              <button id="web-sources-search-btn" class="primary">Search</button>
+              <button id="web-sources-search-btn" class="btn-primary">Search</button>
             </div>
             <p class="status" id="web-sources-status"><span class="pill pending">⏳ idle</span></p>
             <div id="web-sources-results"></div>
@@ -681,9 +653,7 @@
         <div class="page-section hidden" id="page-monitor">
           <section class="card">
             <h2>Puzzle Monitor</h2>
-            <p class="muted">
-              Watches puzzle transactions for changes. Read-only, never moves funds.
-            </p>
+            <p class="muted">Watches puzzle transactions for changes. Read-only, never moves funds.</p>
             <div id="monitor-status">
               <p class="muted">Loading…</p>
             </div>
@@ -696,20 +666,15 @@
             <h1>Help</h1>
             <p class="sub">Frequently asked questions and usage guide</p>
           </header>
-
           <section class="card">
             <h2>Getting started</h2>
-            <p class="muted">
-              Connect your wallet by entering your EVM address and signing a challenge message.
-              This proves ownership without revealing your private key.
-            </p>
+            <p class="muted">Connect your wallet by entering your EVM address and signing a challenge message.</p>
           </section>
-
           <section class="card">
             <h2>FAQ</h2>
             <div class="faq-item">
               <h3>Is this app safe?</h3>
-              <p class="muted">Yes. The app never asks for your seed phrase or private key. You only sign a message to prove ownership.</p>
+              <p class="muted">Yes. The app never asks for your seed phrase or private key.</p>
             </div>
             <div class="faq-item">
               <h3>What can I do for free?</h3>
@@ -717,11 +682,7 @@
             </div>
             <div class="faq-item">
               <h3>How do I unlock more features?</h3>
-              <p class="muted">Upgrade to a paid tier via PayPal to unlock the full puzzle catalog and additional features.</p>
-            </div>
-            <div class="faq-item">
-              <h3>What is the Market Scanner?</h3>
-              <p class="muted">The Market Scanner lets you analyze tokens and check for potential scams before interacting with them.</p>
+              <p class="muted">Upgrade to a paid tier via PayPal to unlock the full puzzle catalog.</p>
             </div>
           </section>
         </div>
@@ -731,7 +692,8 @@
     <footer class="foot">
       <span id="capabilities" class="muted"></span>
     </footer>
-  </main>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

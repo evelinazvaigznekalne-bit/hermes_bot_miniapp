@@ -939,6 +939,22 @@ def make_handler(api: MiniAppAPI):
                     sku = path[len("/api/crack/item/"):]
                     return self._send_json(api.crack_item({"sku": sku}),
                                            extra_headers=self._rl_headers)
+                if path == "/api/catalog/categories":
+                    return self._send_json(api.catalog_categories({}),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/catalog/tabs":
+                    return self._send_json(api.catalog_tabs({}),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/catalog/items":
+                    return self._send_json(api.catalog_items({}),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/catalog/summary":
+                    return self._send_json(api.catalog_summary({}),
+                                           extra_headers=self._rl_headers)
+                if path.startswith("/api/catalog/item/"):
+                    sku = path[len("/api/catalog/item/"):]
+                    return self._send_json(api.catalog_item({"sku": sku}),
+                                           extra_headers=self._rl_headers)
                 return self._static(path)
             except AppError as exc:
                 return self._send_json(exc.as_dict(), 400)

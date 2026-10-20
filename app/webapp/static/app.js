@@ -11,7 +11,292 @@
   if (tg) { tg.ready(); tg.expand(); }
 
   const el = (id) => document.getElementById(id);
-  const state = { address: null, token: null, challenge: null, busy: false, paypalSDK: null, scanCount: 0, puzzlesFound: 0, tracked: 0 };
+  const state = { address: null, token: null, challenge: null, busy: false, paypalSDK: null, scanCount: 0, puzzlesFound: 0, tracked: 0, user: null, walletConnected: false };
+
+  // ---- Onboarding flow: login first, then wallet, then main app ----
+  function initOnboarding() {
+    const gate = el("onboarding-gate");
+    const walletGate = el("wallet-gate");
+    const mainApp = el("main-app");
+    if (!gate || !walletGate || !mainApp) return;
+
+    // Check for existing session
+    const savedToken = localStorage.getItem("hermes_token");
+    const savedUser = localStorage.getItem("hermes_user");
+    if (savedToken && savedUser) {
+      state.token = savedToken;
+      state.user = JSON.parse(savedUser);
+      gate.classList.add("hidden");
+      // Check if wallet was connected
+      const walletAddr = localStorage.getItem("hermes_wallet_addr");
+      if (walletAddr) {
+        state.address = walletAddr;
+        state.walletConnected = true;
+        walletGate.classList.add("hidden");
+        mainApp.classList.remove("hidden");
+        initMainApp();
+      } else {
+        walletGate.classList.remove("hidden");
+        initWalletGate();
+      }
+    } else {
+      gate.classList.remove("hidden");
+      initLoginGate();
+    }
+  }
+
+  function initLoginGate() {
+    const tabs = document.querySelectorAll(".onboarding-tab");
+    const loginForm = el("onboarding-login");
+    const signupForm = el("onboarding-signup");
+    const status = el("onboarding-status");
+
+    tabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const target = tab.dataset.tab;
+        if (target === "login") {
+          loginForm.classList.remove("hidden");
+          signupForm.classList.add("hidden");
+        } else {
+          loginForm.classList.add("hidden");
+          signupForm.classList.remove("hidden");
+        }
+      });
+    });
+
+    el("login-btn").addEventListener("click", async () => {
+      const email = el("login-email").value.trim();
+      const password = el("login-password").value;
+      if (!email || !password) { status.textContent = "Enter email and password"; return; }
+      status.textContent = "Logging in…";
+      try {
+        const resp = await apiPost("/api/auth/login", { email, password });
+        state.token = resp.session_token;
+        state.user = { email };
+        localStorage.setItem("hermes_token", state.token);
+        localStorage.setItem("hermes_user", JSON.stringify(state.user));
+        el("onboarding-gate").classList.add("hidden");
+        el("wallet-gate").classList.remove("hidden");
+        initWalletGate();
+      } catch (err) {
+        status.textContent = err.message || "Login failed";
+      }
+    });
+
+    el("signup-btn").addEventListener("click", async () => {
+      const email = el("signup-email").value.trim();
+      const password = el("signup-password").value;
+      const confirm = el("signup-confirm").value;
+      if (!email || !password) { status.textContent = "Enter email and password"; return; }
+      if (password.length < 8) { status.textContent = "Password must be at least 8 characters"; return; }
+      if (password !== confirm) { status.textContent = "Passwords do not match"; return; }
+      status.textContent = "Creating account…";
+      try {
+        const resp = await apiPost("/api/auth/signup", { email, password });
+        state.token = resp.session_token;
+        state.user = { email };
+        localStorage.setItem("hermes_token", state.token);
+        localStorage.setItem("hermes_user", JSON.stringify(state.user));
+        el("onboarding-gate").classList.add("hidden");
+        el("wallet-gate").classList.remove("hidden");
+        initWalletGate();
+      } catch (err) {
+        status.textContent = err.message || "Signup failed";
+      }
+    });
+
+    el("telegram-login-btn").addEventListener("click", async () => {
+      status.textContent = "Telegram login coming soon…";
+    });
+  }
+
+  function initWalletGate() {
+    const status = el("wallet-gate-status");
+    const challengeArea = el("wallet-challenge-area");
+
+    el("wallet-connect-btn").addEventListener("click", async () => {
+      const addr = el("wallet-address").value.trim();
+      if (!addr) { status.textContent = "Enter an EVM address"; return; }
+      status.textContent = "Requesting challenge…";
+      try {
+        const challenge = await apiPost("/api/auth/challenge", { address: addr });
+        state.challenge = challenge;
+        state.address = addr;
+        challengeArea.classList.remove("hidden");
+        const box = el("wallet-challenge-box");
+        box.textContent = challenge.message || challenge.challenge || "";
+        box.classList.remove("hidden");
+        el("wallet-challenge-nonce").textContent = challenge.nonce || "";
+        status.textContent = "Sign the challenge with your wallet";
+      } catch (err) {
+        status.textContent = err.message || "Failed to get challenge";
+      }
+    });
+
+    el("wallet-challenge-copy-btn").addEventListener("click", () => {
+      const text = el("wallet-challenge-box").textContent;
+      if (navigator.clipboard) navigator.clipboard.writeText(text);
+    });
+
+    el("wallet-verify-btn").addEventListener("click", async () => {
+      const sig = el("wallet-signature-input").value.trim();
+      if (!sig) { status.textContent = "Paste your signature"; return; }
+      status.textContent = "Verifying…";
+      try {
+        const result = await apiPost("/api/auth/verify", {
+          address: state.address,
+          signature: sig,
+          nonce: state.challenge.nonce,
+        });
+        if (result.verified) {
+          state.walletConnected = true;
+          localStorage.setItem("hermes_wallet_addr", state.address);
+          el("wallet-gate").classList.add("hidden");
+          el("main-app").classList.remove("hidden");
+          initMainApp();
+        } else {
+          status.textContent = "Signature verification failed";
+        }
+      } catch (err) {
+        status.textContent = err.message || "Verification failed";
+      }
+    });
+
+    el("wallet-skip-btn").addEventListener("click", () => {
+      el("wallet-gate").classList.add("hidden");
+      el("main-app").classList.remove("hidden");
+      initMainApp();
+    });
+  }
+
+  function initMainApp() {
+    // Update topbar user
+    const userLabel = el("topbar-user-label");
+    if (userLabel && state.user) {
+      userLabel.textContent = state.user.email || "User";
+    }
+
+    // Wire logout
+    const logoutBtn = el("topbar-logout");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        localStorage.removeItem("hermes_token");
+        localStorage.removeItem("hermes_user");
+        localStorage.removeItem("hermes_wallet_addr");
+        state.token = null;
+        state.user = null;
+        state.address = null;
+        state.walletConnected = false;
+        location.reload();
+      });
+    }
+
+    // Wire sidebar navigation
+    const sidebarBtns = document.querySelectorAll(".sidebar-btn");
+    const pageSections = document.querySelectorAll(".page-section");
+    sidebarBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const target = btn.dataset.page;
+        pageSections.forEach(s => s.classList.add("hidden"));
+        const targetPage = el("page-" + target);
+        if (targetPage) targetPage.classList.remove("hidden");
+        sidebarBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        // Close mobile sidebar
+        const sidebar = el("sidebar");
+        const overlay = el("sidebar-overlay");
+        if (sidebar) sidebar.classList.remove("open");
+        if (overlay) overlay.classList.remove("open");
+      });
+    });
+
+    // Wire menu toggle (mobile)
+    const menuToggle = el("menu-toggle");
+    const sidebar = el("sidebar");
+    const overlay = el("sidebar-overlay");
+    if (menuToggle) {
+      menuToggle.addEventListener("click", () => {
+        sidebar.classList.toggle("open");
+        overlay.classList.toggle("open");
+      });
+    }
+    if (overlay) {
+      overlay.addEventListener("click", () => {
+        sidebar.classList.remove("open");
+        overlay.classList.remove("open");
+      });
+    }
+
+    // Wire quick actions
+    document.querySelectorAll(".quick-action-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const action = btn.dataset.action;
+        if (action === "scan") {
+          const targetPage = el("page-token");
+          if (targetPage) {
+            pageSections.forEach(s => s.classList.add("hidden"));
+            targetPage.classList.remove("hidden");
+            sidebarBtns.forEach(b => b.classList.remove("active"));
+            const scanBtn = document.querySelector('[data-page="token"]');
+            if (scanBtn) scanBtn.classList.add("active");
+          }
+        } else if (action === "catalog") {
+          const targetPage = el("page-catalog");
+          if (targetPage) {
+            pageSections.forEach(s => s.classList.add("hidden"));
+            targetPage.classList.remove("hidden");
+            sidebarBtns.forEach(b => b.classList.remove("active"));
+            const catBtn = document.querySelector('[data-page="catalog"]');
+            if (catBtn) catBtn.classList.add("active");
+          }
+        } else if (action === "secret") {
+          const targetPage = el("page-dashboard");
+          if (targetPage) {
+            pageSections.forEach(s => s.classList.add("hidden"));
+            targetPage.classList.remove("hidden");
+            sidebarBtns.forEach(b => b.classList.remove("active"));
+            const dashBtn = document.querySelector('[data-page="dashboard"]');
+            if (dashBtn) dashBtn.classList.add("active");
+          }
+        } else if (action === "profile") {
+          const targetPage = el("page-profile");
+          if (targetPage) {
+            pageSections.forEach(s => s.classList.add("hidden"));
+            targetPage.classList.remove("hidden");
+            sidebarBtns.forEach(b => b.classList.remove("active"));
+            const profBtn = document.querySelector('[data-page="profile"]');
+            if (profBtn) profBtn.classList.add("active");
+          }
+        }
+      });
+    });
+
+    // Wire BTC puzzle list auto-load
+    if (el("btc-puzzle-list")) {
+      loadBtcPuzzleList();
+    }
+
+    // Wire monitor auto-load
+    if (el("monitor-status")) {
+      loadMonitorStatus();
+    }
+  }
+
+  // API helper that works with the new onboarding
+  async function apiPost(path, body) {
+    const headers = { "Content-Type": "application/json" };
+    if (state.token) headers["Authorization"] = "Bearer " + state.token;
+    const resp = await fetch(path, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || data.detail || "Request failed");
+    return data;
+  }
 
   const PILL = (status, text) =>
     `<span class="pill ${status === "✓" ? "ok" : status === "✗" ? "fail" : "pending"}">` +
