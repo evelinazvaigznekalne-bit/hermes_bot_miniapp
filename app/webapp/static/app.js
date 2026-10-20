@@ -545,7 +545,7 @@
     const node = el("auth-status");
     if (state.busy) return;
     state.busy = true;
-    el("telegram-sign-btn").disabled = true;
+    if (el("telegram-sign-btn")) el("telegram-sign-btn").disabled = true;
 
     try {
       let address = el("address-input").value.trim();
@@ -639,7 +639,7 @@
       setStatus(node, "✗", err.message);
     } finally {
       state.busy = false;
-      el("telegram-sign-btn").disabled = false;
+      if (el("telegram-sign-btn")) el("telegram-sign-btn").disabled = false;
       refreshStatus();
     }
   }
@@ -1473,7 +1473,7 @@
   }
 
   el("connect-btn").addEventListener("click", connectAndSign);
-  el("telegram-sign-btn").addEventListener("click", personalSignLogin);
+  if (el("telegram-sign-btn")) el("telegram-sign-btn").addEventListener("click", personalSignLogin);
   el("challenge-copy-btn").addEventListener("click", () => {
     const box = el("challenge-box");
     if (box && box.textContent) {
@@ -1516,7 +1516,7 @@
   el("seed-derive-btn").addEventListener("click", deriveAddresses);
   el("market-scan-btn").addEventListener("click", scanToken);
   el("market-scam-btn").addEventListener("click", checkScam);
-  el("topbar-topup").addEventListener("click", () => {
+  if (el("topbar-topup")) el("topbar-topup").addEventListener("click", () => {
     if (state.token) {
       el("paypal-card").classList.remove("hidden");
       loadPaypalConfig();
