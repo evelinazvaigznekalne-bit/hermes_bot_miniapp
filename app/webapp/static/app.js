@@ -446,7 +446,7 @@
       // Prefer Telegram initData auth when available
       if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
         setStatus(node, "⏳", "authenticating via Telegram…");
-        const result = await api("/api/auth/telegram", {
+        const result = await apiPost("/api/auth/telegram", {
           init_data: window.Telegram.WebApp.initData,
         });
         if (!result.valid) {
@@ -495,7 +495,7 @@
       }
 
       setStatus(node, "⏳", "requesting challenge…");
-      const challenge = await api("/api/auth/challenge", { address });
+      const challenge = await apiPost("/api/auth/challenge", { address });
       state.challenge = challenge;
 
       const box = el("challenge-box");
@@ -515,7 +515,7 @@
       });
 
       setStatus(node, "⏳", "verifying signature…");
-      const result = await api("/api/auth/verify", {
+      const result = await apiPost("/api/auth/verify", {
         address, signature, nonce: challenge.nonce,
       });
       if (!result.verified) {
@@ -566,7 +566,7 @@
       state.address = address;
 
       setStatus(node, "⏳", "requesting challenge…");
-      const challenge = await api("/api/auth/challenge", { address });
+      const challenge = await apiPost("/api/auth/challenge", { address });
       state.challenge = challenge;
 
       const box = el("challenge-box");
@@ -620,7 +620,7 @@
       }
 
       setStatus(node, "⏳", "verifying signature…");
-      const result = await api("/api/auth/verify", {
+      const result = await apiPost("/api/auth/verify", {
         address, signature, nonce: challenge.nonce,
       });
       if (!result.verified) {
@@ -650,7 +650,7 @@
     showSpinner(node, "loading public data…");
     el("puzzle-panel").classList.add("hidden");
     try {
-      const payload = await api("/api/wallet/assets", {
+      const payload = await apiPost("/api/wallet/assets", {
         address: state.address,
         session_token: state.token,
         include_puzzles: el("puzzles-toggle").checked,
@@ -728,7 +728,7 @@
 
     setStatus(status, "pending", "⏳ checking…");
     try {
-      const res = await api("/api/security/scan", { text });
+      const res = await apiPost("/api/security/scan", { text });
       if (res.clean) {
         setStatus(status, "ok", "✓ no secrets detected");
         out.innerHTML =
@@ -760,7 +760,7 @@
     setStatus(status, "pending", "⏳ walking filesystem…");
     el("inv-listing").classList.add("hidden");
     try {
-      const payload = await api("/api/inventory", {
+      const payload = await apiPost("/api/inventory", {
         session_token: state.token,
         include_entries: false,
       });
@@ -804,7 +804,7 @@
     const status = el("inv-status");
     setStatus(status, "pending", "⏳ building listing…");
     try {
-      const payload = await api("/api/inventory/listing", {
+      const payload = await apiPost("/api/inventory/listing", {
         session_token: state.token,
       });
       const pre = el("inv-listing");
@@ -881,7 +881,7 @@
       window.paypal.Buttons({
         style: { layout: "vertical", shape: "pill", color: "gold", height: 44 },
         createOrder: async () => {
-          const order = await api("/api/paypal/orders", {
+          const order = await apiPost("/api/paypal/orders", {
             session_token: state.token, sku: p.sku,
           });
           return order.order_id;
@@ -917,7 +917,7 @@
     setStatus(status, "⏳", "creating order…");
     results.innerHTML = "";
     try {
-      const order = await api("/api/paypal/orders", {
+      const order = await apiPost("/api/paypal/orders", {
         session_token: state.token,
         sku,
       });
@@ -939,7 +939,7 @@
     const results = el("paypal-results");
     setStatus(status, "⏳", "capturing payment…");
     try {
-      const result = await api("/api/paypal/capture", {
+      const result = await apiPost("/api/paypal/capture", {
         session_token: state.token,
         order_id: orderId,
       });
@@ -1208,9 +1208,9 @@
     el("catalog-detail").classList.add("hidden");
     try {
       const cfg = await getJson("/api/catalog/config");
-      const cats = await api("/api/catalog/categories", { session_token: state.token });
-      const tabs = await api("/api/catalog/tabs", { session_token: state.token });
-      const items = await api("/api/catalog/items", {
+      const cats = await apiPost("/api/catalog/categories", { session_token: state.token });
+      const tabs = await apiPost("/api/catalog/tabs", { session_token: state.token });
+      const items = await apiPost("/api/catalog/items", {
         session_token: state.token, limit: 20, offset: 0,
       });
       renderCatalogFacets(cats, tabs);
@@ -1273,7 +1273,7 @@
     const status = el("catalog-status");
     setStatus(status, "pending", "⏳ loading detail…");
     try {
-      const detail = await api("/api/catalog/item", {
+      const detail = await apiPost("/api/catalog/item", {
         session_token: state.token, sku,
       });
       renderCatalogDetail(detail);
@@ -1341,39 +1341,26 @@
     setStatus(status, "pending", "⏳ scanning…");
     results.innerHTML = "";
 
-    // Simulate token scan (in production, this would call a real API)
-    await new Promise((r) => setTimeout(r, 800));
+    try {
+      const payload = await apiPost("/api/market/scan", { query });
+      state.scanCount++;
+      updateDashboardStats();
+      addRecentActivity(`Scanned ${query.slice(0, 16)}…`);
 
-    const isAddress = /^0x[a-fA-F0-9]{40}$/.test(query);
-    const mockResult = {
-      name: isAddress ? "Token at " + query.slice(0, 10) + "..." : query.toUpperCase(),
-      symbol: isAddress ? "TKN" : query.toUpperCase(),
-      address: isAddress ? query : "0x" + "0".repeat(40),
-      chain: "Ethereum",
-      liquidity: Math.floor(Math.random() * 1000000),
-      volume24h: Math.floor(Math.random() * 500000),
-      priceChange: (Math.random() * 20 - 10).toFixed(2),
-      riskScore: Math.floor(Math.random() * 100),
-      isScam: Math.random() < 0.15,
-    };
-
-    state.scanCount++;
-    updateDashboardStats();
-    addRecentActivity(`Scanned ${mockResult.name}`);
-
-    const riskColor = mockResult.riskScore > 70 ? "var(--fail)" : mockResult.riskScore > 40 ? "var(--pending)" : "var(--ok)";
-    results.innerHTML = `
-      <div class="market-scan-result">
-        <h4>${escapeHtml(mockResult.name)} (${escapeHtml(mockResult.symbol)})</h4>
-        <div class="profile-row"><span class="profile-label">Chain</span><span class="profile-value">${escapeHtml(mockResult.chain)}</span></div>
-        <div class="profile-row"><span class="profile-label">Liquidity</span><span class="profile-value">$${mockResult.liquidity.toLocaleString()}</span></div>
-        <div class="profile-row"><span class="profile-label">24h Volume</span><span class="profile-value">$${mockResult.volume24h.toLocaleString()}</span></div>
-        <div class="profile-row"><span class="profile-label">Price change</span><span class="profile-value">${mockResult.priceChange}%</span></div>
-        <div class="profile-row"><span class="profile-label">Risk score</span><span class="profile-value" style="color:${riskColor}">${mockResult.riskScore}/100</span></div>
-        ${mockResult.isScam ? '<div class="market-scam-alert"><strong>⚠️ High risk token</strong><p class="muted">This token shows characteristics associated with scams. Exercise extreme caution.</p></div>' : ""}
-      </div>
-    `;
-    setStatus(status, "ok", "✓ scan complete");
+      const riskColor = payload.risk_level === "high" ? "var(--fail)" : payload.risk_level === "medium" ? "var(--pending)" : "var(--ok)";
+      results.innerHTML = `
+        <div class="market-scan-result">
+          <h4>${escapeHtml(payload.name || query)} (${escapeHtml(payload.symbol || "—")})</h4>
+          <div class="profile-row"><span class="profile-label">Address</span><span class="profile-value"><code>${escapeHtml(payload.address || query)}</code></span></div>
+          <div class="profile-row"><span class="profile-label">Chain</span><span class="profile-value">${escapeHtml(payload.chain || "Ethereum")}</span></div>
+          <div class="profile-row"><span class="profile-label">Risk level</span><span class="profile-value" style="color:${riskColor}">${escapeHtml(payload.risk_level || "unknown")}</span></div>
+          ${payload.scam_flag ? '<div class="market-scam-alert"><strong>⚠️ High risk token</strong><p class="muted">This token shows characteristics associated with scams. Exercise extreme caution.</p></div>' : ""}
+        </div>
+      `;
+      setStatus(status, "ok", "✓ scan complete");
+    } catch (err) {
+      setStatus(status, "fail", `✗ ${err.message}`);
+    }
   }
 
   async function checkScam() {
@@ -1390,25 +1377,28 @@
     setStatus(status, "pending", "⏳ checking…");
     results.innerHTML = "";
 
-    await new Promise((r) => setTimeout(r, 600));
+    try {
+      const payload = await apiPost("/api/market/scan", { query: address, type: "scam_check" });
 
-    const isScam = Math.random() < 0.2;
-    if (isScam) {
-      results.innerHTML = `
-        <div class="market-scam-alert">
-          <strong>⚠️ Potential scam detected</strong>
-          <p class="muted">This address has been flagged for suspicious activity. Do not interact with this token.</p>
-        </div>
-      `;
-      setStatus(status, "fail", "✗ flagged");
-    } else {
-      results.innerHTML = `
-        <div class="market-scam-safe">
-          <strong>✅ No known issues</strong>
-          <p class="muted">This address does not appear in known scam databases. Always do your own research.</p>
-        </div>
-      `;
-      setStatus(status, "ok", "✓ clear");
+      if (payload.scam_flag || payload.risk_level === "high") {
+        results.innerHTML = `
+          <div class="market-scam-alert">
+            <strong>⚠️ Potential scam detected</strong>
+            <p class="muted">Risk level: ${escapeHtml(payload.risk_level || "high")}. ${escapeHtml(payload.scam_reason || "This address shows characteristics associated with scams.")}</p>
+          </div>
+        `;
+        setStatus(status, "fail", "✗ flagged");
+      } else {
+        results.innerHTML = `
+          <div class="market-scam-safe">
+            <strong>✅ No known issues</strong>
+            <p class="muted">Risk level: ${escapeHtml(payload.risk_level || "low")}. This address does not appear in known scam databases.</p>
+          </div>
+        `;
+        setStatus(status, "ok", "✓ clear");
+      }
+    } catch (err) {
+      setStatus(status, "fail", `✗ ${err.message}`);
     }
   }
 
@@ -1517,7 +1507,7 @@
   el("signup-btn").addEventListener("click", signup);
   el("telegram-login-btn").addEventListener("click", telegramLogin);
   el("wallet-add-btn").addEventListener("click", addWallet);
-  el("token-scan-btn").addEventListener("click", scanToken);
+  el("token-scan-btn").addEventListener("click", scanTokenPage);
   el("crack-btn").addEventListener("click", crackPuzzle);
   el("image-analyze-btn").addEventListener("click", analyzeImage);
   el("btc-puzzle-check-btn").addEventListener("click", checkBtcPuzzle);
@@ -1553,7 +1543,7 @@
       if (savedToken) {
         state.token = savedToken;
         try {
-          const result = await api("/api/auth/session", { session_token: savedToken });
+          const result = await apiPost("/api/auth/session", { session_token: savedToken });
           if (result.valid) {
             state.address = result.user?.name || savedAddress || "Wallet";
             showWelcomeBack(state.address);
@@ -1579,7 +1569,7 @@
     }
     setStatus(status, "pending", "⏳ loading file…");
     try {
-      const payload = await api("/api/tools/file", { path });
+      const payload = await apiPost("/api/tools/file", { path });
       results.innerHTML = `<div class="tool-output">${escapeHtml(payload.analysis)}</div>`;
       setStatus(status, "ok", `✓ ${payload.size} bytes`);
     } catch (err) {
@@ -1597,7 +1587,7 @@
     }
     setStatus(status, "pending", "⏳ decoding…");
     try {
-      const payload = await api("/api/tools/decode", { data: input });
+      const payload = await apiPost("/api/tools/decode", { data: input });
       results.innerHTML = `<div class="tool-output">${escapeHtml(payload.result)}</div>`;
       setStatus(status, "ok", `✓ ${payload.encoding}`);
     } catch (err) {
@@ -1615,7 +1605,7 @@
     }
     setStatus(status, "pending", "⏳ analyzing…");
     try {
-      const payload = await api("/api/tools/analyze", { data: input });
+      const payload = await apiPost("/api/tools/analyze", { data: input });
       results.innerHTML = `<div class="tool-output">${escapeHtml(payload.result)}</div>`;
       setStatus(status, "ok", "✓ analysis complete");
     } catch (err) {
@@ -1634,7 +1624,7 @@
     }
     setStatus(status, "pending", "⏳ simulating…");
     try {
-      const payload = await api("/api/tools/sweep", { from, to });
+      const payload = await apiPost("/api/tools/sweep", { from, to });
       results.innerHTML = `<div class="tool-output">${escapeHtml(payload.result)}</div>`;
       setStatus(status, "ok", "✓ simulation complete");
     } catch (err) {
@@ -1653,7 +1643,7 @@
     }
     setStatus(status, "pending", "⏳ logging in…");
     try {
-      const payload = await api("/api/auth/login", { email, password });
+      const payload = await apiPost("/api/auth/login", { email, password });
       state.token = payload.session_token;
       // Persist session in localStorage
       try {
@@ -1677,7 +1667,7 @@
     }
     setStatus(status, "pending", "⏳ creating account…");
     try {
-      const payload = await api("/api/auth/signup", { email, password });
+      const payload = await apiPost("/api/auth/signup", { email, password });
       state.token = payload.session_token;
       setStatus(status, "ok", `✓ account created as ${payload.user.name}`);
     } catch (err) {
@@ -1693,7 +1683,7 @@
     }
     setStatus(status, "pending", "⏳ authenticating…");
     try {
-      const payload = await api("/api/auth/telegram", {
+      const payload = await apiPost("/api/auth/telegram", {
         init_data: window.Telegram.WebApp.initData,
       });
       state.token = payload.session_token;
@@ -1714,7 +1704,7 @@
     }
     setStatus(status, "pending", "⏳ adding wallet…");
     try {
-      const payload = await api("/api/wallet/add", {
+      const payload = await apiPost("/api/wallet/add", {
         address, label, session_token: state.token,
       });
       setStatus(status, "ok", `✓ wallet added`);
@@ -1730,7 +1720,7 @@
     const list = el("wallet-list");
     const balances = el("wallet-balances");
     try {
-      const payload = await api("/api/wallet/list", { session_token: state.token });
+      const payload = await apiPost("/api/wallet/list", { session_token: state.token });
       const wallets = payload.wallets || [];
       if (wallets.length === 0) {
         list.innerHTML = `<p class="muted">No wallets added yet.</p>`;
@@ -1755,7 +1745,7 @@
   }
 
   // ---- token recognition page -------------------------------------------
-  async function scanToken() {
+  async function scanTokenPage() {
     const status = el("token-status");
     const results = el("token-results");
     const input = el("token-input").value.trim();
@@ -1765,8 +1755,13 @@
     }
     setStatus(status, "pending", "⏳ scanning token…");
     try {
-      const payload = await api("/api/market/scan", { address: input });
-      results.innerHTML = `<div class="tool-output">${escapeHtml(JSON.stringify(payload, null, 2))}</div>`;
+      const payload = await apiPost("/api/market/scan", { query: input });
+      results.innerHTML = `<div class="market-scan-result">
+        <h4>${escapeHtml(payload.name || input)} (${escapeHtml(payload.symbol || "—")})</h4>
+        <div class="profile-row"><span class="profile-label">Chain</span><span class="profile-value">${escapeHtml(payload.chain || "Ethereum")}</span></div>
+        <div class="profile-row"><span class="profile-label">Risk</span><span class="profile-value">${escapeHtml(payload.risk_level || "unknown")}</span></div>
+        ${payload.scam_flag ? '<div class="market-scam-alert"><strong>⚠️ Scam risk</strong></div>' : ""}
+      </div>`;
       setStatus(status, "ok", "✓ token scanned");
     } catch (err) {
       setStatus(status, "fail", `✗ ${err.message}`);
@@ -1785,7 +1780,7 @@
     }
     setStatus(status, "pending", "⏳ cracking…");
     try {
-      const payload = await api("/api/tools/crack", { puzzle, password });
+      const payload = await apiPost("/api/tools/crack", { puzzle, password });
       results.innerHTML = `<div class="tool-output">${escapeHtml(payload.result)}</div>`;
       setStatus(status, "ok", "✓ crack attempt complete");
     } catch (err) {
@@ -1908,7 +1903,7 @@
         reader.onerror = () => reject(new Error("failed to read file"));
         reader.readAsDataURL(file);
       });
-      const payload = await api("/api/tools/image", {
+      const payload = await apiPost("/api/tools/image", {
         filename: file.name,
         base64_data: base64Data,
       });
@@ -1930,7 +1925,7 @@
     }
     setStatus(status, "pending", "⏳ validating…");
     try {
-      const payload = await api("/api/tools/seed-validate", { phrase });
+      const payload = await apiPost("/api/tools/seed-validate", { phrase });
       if (payload.valid) {
         setStatus(status, "ok", `✓ valid ${payload.word_count}-word seed phrase`);
         results.innerHTML = `<p class="muted">Checksum passed. Word count: ${payload.word_count}.</p>`;
@@ -1956,7 +1951,7 @@
     }
     setStatus(status, "pending", "⏳ deriving addresses…");
     try {
-      const payload = await api("/api/tools/derive-addresses", {
+      const payload = await apiPost("/api/tools/derive-addresses", {
         phrase, passphrase, count: 5,
       });
       if (payload.error) {
@@ -2001,7 +1996,7 @@
   async function loadHints() {
     const list = el("hints-list");
     try {
-      const payload = await api("/api/catalog/items", { session_token: state.token, limit: 50 });
+      const payload = await apiPost("/api/catalog/items", { session_token: state.token, limit: 50 });
       const items = payload.items || [];
       if (items.length === 0) {
         list.innerHTML = `<p class="muted">Sign in to view hints.</p>`;
@@ -2049,7 +2044,7 @@
   // ---- security research -----------------------------------------------
   async function loadResearch() {
     try {
-      const methodology = await api("/api/security/methodology", {});
+      const methodology = await apiPost("/api/security/methodology", {});
 
       // Render workflow
       const wfEl = el("research-workflow");
