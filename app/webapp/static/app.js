@@ -854,6 +854,14 @@
         ],
       },
       {
+        title: "Security Research",
+        endpoints: [
+          { method: "POST", path: "/api/security/research", desc: "Bug bounty workflow steps", auth: "free", body: '{}' },
+          { method: "POST", path: "/api/security/opportunities", desc: "Live bounty opportunities", auth: "free", body: '{}' },
+          { method: "POST", path: "/api/security/methodology", desc: "Full methodology + pitfalls + sources", auth: "free", body: '{}' },
+        ],
+      },
+      {
         title: "Puzzle catalog",
         endpoints: [
           { method: "GET", path: "/api/catalog/config", desc: "Catalog feature flags", auth: "free" },
@@ -1245,17 +1253,31 @@
   const params = new URLSearchParams(window.location.search);
   if (params.get("address")) el("address-input").value = params.get("address");
 
-  // Auto-fill wallet address from localStorage if previously saved
-  try {
-    const savedAddress = localStorage.getItem("hermes_wallet_address");
-    const savedToken = localStorage.getItem("hermes_session_token");
-    if (savedAddress && !el("address-input").value) {
-      el("address-input").value = savedAddress;
-    }
-    if (savedToken) {
-      state.token = savedToken;
-    }
-  } catch (e) { /* storage may be unavailable */ }
+  // Restore session from localStorage (async — verifies token with backend)
+  (async () => {
+    try {
+      const savedAddress = localStorage.getItem("hermes_wallet_address");
+      const savedToken = localStorage.getItem("hermes_session_token");
+      if (savedAddress && !el("address-input").value) {
+        el("address-input").value = savedAddress;
+      }
+      if (savedToken) {
+        state.token = savedToken;
+        try {
+          const result = await api("/api/auth/session", { session_token: savedToken });
+          if (result.valid) {
+            state.address = result.user?.name || savedAddress || "Wallet";
+            showWelcomeBack(state.address);
+          } else {
+            localStorage.removeItem("hermes_session_token");
+            state.token = null;
+          }
+        } catch {
+          // Session check failed — keep token but don't block
+        }
+      }
+    } catch (e) { /* storage may be unavailable */ }
+  })();
 
   // ---- tools page -------------------------------------------------------
   async function loadFile() {
@@ -1615,6 +1637,91 @@
     }
   }
 
+  // ---- welcome back / switch user ---------------------------------------
+  function showWelcomeBack(identity) {
+    const overlay = document.createElement("div");
+    overlay.className = "confirm-overlay";
+    overlay.innerHTML = `
+      <div class="confirm-dialog">
+        <h3>Welcome back</h3>
+        <p>You are signed in as <strong>${escapeHtml(identity)}</strong>.</p>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" id="switch-user-btn">Switch user</button>
+          <button class="confirm-ok primary" id="continue-btn">Continue</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const close = () => overlay.remove();
+    overlay.querySelector("#continue-btn").addEventListener("click", close);
+    overlay.querySelector("#switch-user-btn").addEventListener("click", () => {
+      localStorage.removeItem("hermes_session_token");
+      localStorage.removeItem("hermes_wallet_address");
+      state.token = null;
+      state.address = null;
+      close();
+      navigateTo("login");
+      toast("Signed out. You can now switch users.", "info");
+    });
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  }
+
+  // ---- security research -----------------------------------------------
+  async function loadResearch() {
+    try {
+      const methodology = await api("/api/security/methodology", {});
+
+      // Render workflow
+      const wfEl = el("research-workflow");
+      if (wfEl && methodology.workflow) {
+        wfEl.innerHTML = methodology.workflow.map(step => `
+          <div class="profile-row" style="flex-direction:column;align-items:flex-start;">
+            <strong>${escapeHtml(step.title)}</strong>
+            <p class="muted">${escapeHtml(step.description)}</p>
+            ${step.tools.length ? `<p class="muted">Tools: ${step.tools.map(escapeHtml).join(", ")}</p>` : ""}
+            ${step.tips.length ? `<ul class="security-tips">${step.tips.map(t => `<li>${escapeHtml(t)}</li>`).join("")}</ul>` : ""}
+            ${step.example ? `<div class="tool-output">${escapeHtml(step.example)}</div>` : ""}
+          </div>
+        `).join("");
+      }
+
+      // Render opportunities
+      const oppEl = el("research-opportunities");
+      if (oppEl && methodology.opportunities) {
+        const opps = methodology.opportunities;
+        if (opps.opportunities && opps.opportunities.length > 0) {
+          oppEl.innerHTML = opps.opportunities.slice(0, 10).map(o => `
+            <div class="profile-row">
+              <span class="profile-label">${escapeHtml(o.platform || "unknown")}</span>
+              <span class="profile-value">${escapeHtml(o.target || o.title || "Unknown target")}</span>
+              <span class="muted">${escapeHtml(o.max_bounty || o.pounty || "N/A")}</span>
+            </div>
+          `).join("");
+        } else {
+          oppEl.innerHTML = `<p class="muted">${escapeHtml(opps.detail || "No opportunities found.")}</p>`;
+        }
+      }
+
+      // Render pitfalls
+      const pitEl = el("research-pitfalls");
+      if (pitEl && methodology.pitfalls) {
+        pitEl.innerHTML = methodology.pitfalls.map(p => `<li>${escapeHtml(p)}</li>`).join("");
+      }
+
+      // Render data sources
+      const srcEl = el("research-sources");
+      if (srcEl && methodology.data_sources) {
+        srcEl.innerHTML = Object.entries(methodology.data_sources).map(([name, url]) => `
+          <div class="profile-row">
+            <span class="profile-label">${escapeHtml(name)}</span>
+            <a href="${escapeHtml(url)}" target="_blank" rel="noopener" class="profile-value">${escapeHtml(url)}</a>
+          </div>
+        `).join("");
+      }
+    } catch (err) {
+      toast("Failed to load research data: " + err.message, "error");
+    }
+  }
+
   // ---- sidebar navigation -----------------------------------------------
   function navigateTo(page) {
     document.querySelectorAll(".sidebar-btn").forEach((b) => b.classList.remove("active"));
@@ -1626,6 +1733,7 @@
     if (page === "catalog" && state.token) loadCatalog();
     if (page === "profile") renderProfileAccount();
     if (page === "security") renderSecurityPage();
+    if (page === "research") loadResearch();
     if (page === "dashboard") updateDashboardStats();
   }
 

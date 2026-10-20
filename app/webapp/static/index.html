@@ -53,6 +53,7 @@
           <div class="sidebar-group-title">Account</div>
           <button class="sidebar-btn" data-page="profile">Profile</button>
           <button class="sidebar-btn" data-page="security">Security</button>
+          <button class="sidebar-btn" data-page="research">Research</button>
           <button class="sidebar-btn" data-page="api">API</button>
         </div>
         <div class="sidebar-group">
@@ -358,6 +359,36 @@
               <li>All API requests are rate-limited and logged.</li>
               <li>Secret scanning is client-side only — nothing is stored or transmitted.</li>
             </ul>
+          </section>
+        </div>
+
+        <!-- Security Research page -->
+        <div class="page-section hidden" id="page-research">
+          <header class="head">
+            <h1>Security Research</h1>
+            <p class="sub">Bug bounty methodology + opportunity scanner</p>
+          </header>
+
+          <section class="card">
+            <h2>Research Workflow</h2>
+            <p class="muted">A structured approach to finding and reporting bugs.</p>
+            <div id="research-workflow"></div>
+          </section>
+
+          <section class="card">
+            <h2>Open Opportunities</h2>
+            <p class="muted">Live bounty programs from Cantina, Immunefi, Sherlock, Superteam.</p>
+            <div id="research-opportunities"></div>
+          </section>
+
+          <section class="card">
+            <h2>Common Pitfalls</h2>
+            <ul class="security-tips" id="research-pitfalls"></ul>
+          </section>
+
+          <section class="card">
+            <h2>Data Sources</h2>
+            <div id="research-sources"></div>
           </section>
         </div>
 

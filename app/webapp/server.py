@@ -22,6 +22,15 @@ Serves the static Mini App frontend plus a small JSON API:
   POST /api/paypal/entitlement     report the caller's own entitlement
   POST /api/inventory              metadata-only file listing (owner only)
   POST /api/inventory/listing      printable file listing (owner only)
+  POST /api/tools/*                file/decode/analyze/sweep/crack/image/seed/derive
+  POST /api/tools/decode-transaction  raw signed tx -> structured fields (BTC + EVM)
+  POST /api/tools/mnemonic          BIP39 phrase -> entropy/seed/addresses
+  POST /api/tools/calculator        private key (hex/WIF) -> all addresses
+  POST /api/tools/wallet-dat        wallet.dat inventory, keys redacted
+  POST /api/puzzles/classify        puzzle -> strategy family (math/brute/...)
+  POST /api/puzzles/classify-catalog  whole-corpus family distribution
+  POST /api/puzzles/plan            concrete attack plan for a puzzle
+  POST /api/puzzles/attack          run the family's attack, report N/D/t
 
 No transaction endpoint exists. Nothing here can move funds. The payment
 endpoints only ever *grant access*; they cannot send money anywhere.
@@ -29,6 +38,7 @@ endpoints only ever *grant access*; they cannot send money anywhere.
 
 from __future__ import annotations
 
+import base64
 import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,6 +55,14 @@ from ..errors import ValidationError
 from ..access import Tier, tier_summary
 from ..market import TokenScanner
 from ..tools import analyze_file, decode_data, analyze_data, simulate_sweep, crack_list
+from ..crypto_tools import (
+    convert_mnemonic,
+    crypto_calculator,
+    decode_transaction,
+    parse_wallet_dat,
+)
+from ..puzzles.attack import guess_candidates, plan_attack, run_attack
+from ..puzzle_types import FAMILIES, classify_catalog, classify_puzzle, classify_text
 from ..users import UserStore
 from .ratelimit import RateLimiter
 
@@ -433,6 +451,180 @@ class MiniAppAPI:
             count=int(body.get("count") or 5),
         )
 
+    # -- cryptographic reverse engineering (app/crypto_tools.py) ----------
+    #
+    # These are the privatekeys.pw-style tools: a transaction decoder, a mnemonic
+    # converter, a key->address calculator and a wallet.dat viewer.  All are local,
+    # read-only and need no API key.  Key material is redacted by default.
+
+    def tools_decode_transaction(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Decode a raw signed Bitcoin or Ethereum transaction."""
+        from ..crypto_tools import DecodeError
+
+        raw = str(body.get("raw") or body.get("hex") or body.get("data") or "")
+        chain = str(body.get("chain") or "auto")
+        if not raw:
+            raise ValidationError("'raw' (hex transaction) is required")
+        try:
+            result = decode_transaction(raw, chain=chain)
+        except DecodeError as exc:
+            raise ValidationError(str(exc)) from exc
+        result["status"] = "✓"
+        return result
+
+    def tools_convert_mnemonic(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """BIP39 phrase -> entropy/seed/addresses, with checksum validation."""
+        from ..crypto_tools import DecodeError
+
+        phrase = str(body.get("phrase") or body.get("mnemonic") or "")
+        if not phrase.strip():
+            raise ValidationError("'phrase' is required")
+        to = str(body.get("to") or "all")
+        passphrase = str(body.get("passphrase") or "")
+        language = str(body.get("language") or "english")
+        try:
+            result = convert_mnemonic(phrase, to=to, passphrase=passphrase,
+                                      language=language)
+        except DecodeError as exc:
+            raise ValidationError(str(exc)) from exc
+        result["status"] = "✓" if result.get("valid") else "✗"
+        return result
+
+    def tools_crypto_calculator(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Given a private key (hex or WIF), derive every address it controls."""
+        from ..crypto_tools import DecodeError
+
+        key = str(body.get("key") or body.get("private_key") or "")
+        if not key:
+            raise ValidationError("'key' (hex or WIF) is required")
+        try:
+            result = crypto_calculator(
+                key, include_uncompressed=bool(body.get("include_uncompressed", True)))
+        except DecodeError as exc:
+            raise ValidationError(str(exc)) from exc
+        result["status"] = "✓"
+        return result
+
+    def tools_parse_wallet_dat(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Inventory a Bitcoin Core wallet.dat without exposing key material.
+
+        Accepts base64 file content (what a browser upload gives) or a server-side
+        path.  Key bytes are redacted unless ``include_key_bytes`` is explicitly set.
+        """
+        from ..crypto_tools import DecodeError
+
+        b64 = str(body.get("base64_data") or "")
+        path = str(body.get("path") or "")
+        data = b""
+        if b64:
+            try:
+                data = base64.b64decode(b64)
+            except Exception as exc:
+                raise ValidationError(f"invalid base64: {exc}") from exc
+            source = "upload"
+        elif path:
+            p = Path(path).expanduser()
+            if not p.is_file():
+                raise ValidationError(f"file not found: {path}")
+            data = p.read_bytes()
+            source = str(p)
+        else:
+            raise ValidationError("supply 'base64_data' or 'path'")
+
+        try:
+            result = parse_wallet_dat(
+                data, include_key_bytes=bool(body.get("include_key_bytes", False)))
+        except DecodeError as exc:
+            raise ValidationError(str(exc)) from exc
+        result["source"] = source
+        result["status"] = "✓"
+        return result
+
+    # -- puzzle strategy identification + attack planning ----------------
+
+    def puzzles_classify(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Classify a puzzle into a strategy family.
+
+        Accepts either a catalog ``slug`` (looked up in the real corpus) or free
+        ``text`` (a description with no catalog entry).
+        """
+        slug = str(body.get("slug") or body.get("puzzle") or "").strip()
+        text = str(body.get("text") or "").strip()
+
+        if slug:
+            record = self.service.catalog.item_detail(Tier.PAID, slug)
+            if record is None:
+                raise ValidationError(f"unknown slug {slug!r}")
+            raw = self._raw_entry(slug)
+            classification = classify_puzzle(raw or record)
+            out = classification.as_dict()
+            out["title"] = record.get("title")
+            out["chain"] = record.get("category")
+            out["families"] = {k: FAMILIES[k].label for k in FAMILIES}
+            out["status"] = "✓"
+            return out
+
+        if text:
+            out = classify_text(text, slug=slug or "<text>").as_dict()
+            out["families"] = {k: FAMILIES[k].label for k in FAMILIES}
+            out["status"] = "✓"
+            return out
+
+        raise ValidationError("supply 'slug' (catalog puzzle) or 'text'")
+
+    def puzzles_classify_catalog(self) -> Dict[str, Any]:
+        """Classify the whole corpus and return the per-family distribution."""
+        return classify_catalog(
+            [getattr(e, "raw", None) or {} for e in self.service.catalog.public_entries]
+        )
+
+    def puzzles_plan(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the concrete attack plan a puzzle's family implies."""
+        slug = str(body.get("slug") or "").strip()
+        if not slug:
+            raise ValidationError("'slug' is required")
+        raw = self._raw_entry(slug)
+        if raw is None:
+            raise ValidationError(f"unknown slug {slug!r}")
+        plan = plan_attack(raw)
+        out = plan.as_dict()
+        out["status"] = "✓"
+        return out
+
+    def puzzles_attack(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Run the family's attack and report N, D, t and witness status.
+
+        An oracle cannot cross the HTTP boundary, so this endpoint runs the engine's
+        *decision* paths -- feasibility arithmetic, structural curve facts, capacity
+        checks and the needs-input verdicts.  Pass family-specific inputs through
+        ``extra`` (``start``/``end`` for brute force, ``symbols`` for capacity,
+        ``n``/``leaked_bits``/``signatures`` for math).
+        """
+        slug = str(body.get("slug") or "").strip()
+        if not slug:
+            raise ValidationError("'slug' is required")
+        raw = self._raw_entry(slug)
+        if raw is None:
+            raise ValidationError(f"unknown slug {slug!r}")
+
+        outcome = run_attack(
+            raw,
+            budget_seconds=float(body.get("budget_seconds") or 5.0),
+            extra=dict(body.get("extra") or {}),
+        )
+        out = outcome.as_dict()
+        out["slug"] = slug
+        return out
+
+    def _raw_entry(self, slug: str) -> Optional[Dict[str, Any]]:
+        """Find the raw corpus record behind a catalog slug."""
+        for entry in self.service.catalog.public_entries:
+            if str(getattr(entry, "id", "")) == slug:
+                raw = getattr(entry, "raw", None)
+                if isinstance(raw, dict):
+                    return raw
+        return None
+
     def crack_list(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """List puzzles from the catalog with filtering and search."""
         result = crack_list(
@@ -529,6 +721,22 @@ class MiniAppAPI:
         stats["tier"] = self.service.tier_for(address).value
         stats["status"] = "✓"
         return stats
+
+    # -- security research ------------------------------------------------
+    def security_research(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the security research workflow."""
+        from ..security_research import get_workflow
+        return get_workflow()
+
+    def security_opportunities(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Return current bounty opportunities."""
+        from ..security_research import get_opportunities
+        return get_opportunities()
+
+    def security_methodology(self, body: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the complete security research methodology."""
+        from ..security_research import get_methodology
+        return get_methodology()
 
 
 def make_handler(api: MiniAppAPI):
@@ -733,6 +941,30 @@ def make_handler(api: MiniAppAPI):
                 if path == "/api/tools/derive-addresses":
                     return self._send_json(api.tools_derive_addresses(body),
                                            extra_headers=self._rl_headers)
+                if path == "/api/tools/decode-transaction":
+                    return self._send_json(api.tools_decode_transaction(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/tools/mnemonic":
+                    return self._send_json(api.tools_convert_mnemonic(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/tools/calculator":
+                    return self._send_json(api.tools_crypto_calculator(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/tools/wallet-dat":
+                    return self._send_json(api.tools_parse_wallet_dat(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/puzzles/classify":
+                    return self._send_json(api.puzzles_classify(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/puzzles/classify-catalog":
+                    return self._send_json(api.puzzles_classify_catalog(),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/puzzles/plan":
+                    return self._send_json(api.puzzles_plan(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/puzzles/attack":
+                    return self._send_json(api.puzzles_attack(body),
+                                           extra_headers=self._rl_headers)
                 if path == "/api/auth/login":
                     return self._send_json(api.auth_login(body),
                                            extra_headers=self._rl_headers)
@@ -753,6 +985,15 @@ def make_handler(api: MiniAppAPI):
                                            extra_headers=self._rl_headers)
                 if path == "/api/user/stats":
                     return self._send_json(api.user_stats(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/security/research":
+                    return self._send_json(api.security_research(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/security/opportunities":
+                    return self._send_json(api.security_opportunities(body),
+                                           extra_headers=self._rl_headers)
+                if path == "/api/security/methodology":
+                    return self._send_json(api.security_methodology(body),
                                            extra_headers=self._rl_headers)
                 return self._send_json({"error": "not_found"}, 404)
             except AppError as exc:

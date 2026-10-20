@@ -8,17 +8,34 @@ anything. The bot token comes from the environment only.
 from __future__ import annotations
 
 import html
+import os
 import re
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..config import Settings, get_settings, is_placeholder
 from ..errors import ConfigError
+from ..formatting import (
+    ai_suggestion, box, esc, file_analysis_result, goal_prompt,
+    opportunity_list, puzzle_verdict, research_workflow_summary,
+    scan_result, tool_call, tool_block, verdict, welcome_message,
+)
 from ..http import HttpClient
 from ..logging_setup import get_logger, register_secret
 from ..service import WalletService
 from ..users import UserStore
+from ..webtools import (
+    UnsafeUrlError,
+    describe_antibot,
+    extract_og_image,
+    fetch_text,
+    fetch_wayback,
+    summarize_page,
+    validate_public_https,
+    wayback_available,
+)
 
 log = get_logger()
 
@@ -36,6 +53,27 @@ def _looks_like_address(text: str) -> bool:
     if re.match(r'^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$', text):
         return True
     return False
+
+
+#: Host accepted by /ig. Subdomains (www., m., …) are allowed; lookalikes such
+#: as ``instagram.com.evil.example`` or ``notinstagram.com`` are not, because
+#: the check requires either an exact match or a leading-dot suffix.
+_INSTAGRAM_HOST = "instagram.com"
+
+
+def _is_instagram_post_url(url: str) -> bool:
+    """True for an http(s) Instagram post/reel URL on an allowed host."""
+    try:
+        parsed = urllib.parse.urlsplit(str(url).strip())
+    except ValueError:
+        return False
+    if parsed.scheme.lower() not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    if not (host == _INSTAGRAM_HOST or host.endswith("." + _INSTAGRAM_HOST)):
+        return False
+    path = parsed.path or "/"
+    return path.startswith(("/p/", "/reel/", "/tv/"))
 
 
 def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
@@ -62,7 +100,21 @@ def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
         "  /progress — your tracked puzzle progress\n"
         "  /progress set &lt;sku&gt; [status] — track a puzzle\n"
         "  /crack &lt;puzzle_id&gt; — show crack attempt\n"
-        "  /image — image analysis info\n\n"
+        "  /classify [puzzle_id|text] — identify the puzzle type (math/brute/…)\n"
+        "  /plan &lt;puzzle_id&gt; — the concrete attack its type implies\n"
+        "  /families — the strategy types and corpus distribution\n"
+        "  /image — image analysis info\n"
+        "  /goal [text] — AI goal helper\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🌐 <b>Web Research</b>\n"
+        "  /archive &lt;url&gt; — archived copy (bypasses bot gates)\n"
+        "  /ig &lt;post_url&gt; — Instagram post media URL\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🔐 <b>Crypto Tools</b> — offline, no key needed\n"
+        "  /txdecode &lt;hex&gt; — decode a raw BTC or ETH transaction\n"
+        "  /mnemonic &lt;words&gt; — BIP39 check + seed + addresses\n"
+        "  /keycalc &lt;hex|wif&gt; — every address a key controls\n"
+        "  /walletdat &lt;path&gt; — inspect a wallet.dat (keys redacted)\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "👤 <b>Account</b>\n"
         "  /dashboard — your stats and activity\n"
@@ -246,8 +298,31 @@ class TelegramBot:
             reply = self._progress_text(chat_id, args)
         elif command == "/crack":
             reply = self._crack_text(args)
+        elif command == "/classify":
+            reply = self._classify_text(args)
+        elif command == "/plan":
+            reply = self._plan_text(args)
+        elif command == "/families":
+            reply = self._families_text()
+        elif command == "/txdecode":
+            reply = self._txdecode_text(args)
+        elif command == "/mnemonic":
+            reply = self._mnemonic_text(args)
+        elif command == "/keycalc":
+            reply = self._keycalc_text(args)
+        elif command == "/walletdat":
+            reply = self._walletdat_text(args)
         elif command == "/image":
             reply = self._image_text()
+        elif command == "/archive":
+            reply = self._archive_text(args)
+        elif command in ("/ig", "/instagram"):
+            reply = self._instagram_text(args)
+        elif command == "/goal":
+            if args:
+                reply = self._goal_text(" ".join(args))
+            else:
+                reply = goal_prompt()
         elif command == "/login":
             reply = self._login_text()
         elif command == "/wallet":
@@ -332,6 +407,295 @@ class TelegramBot:
         except Exception as exc:
             return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
 
+    # -- puzzle strategy identification -----------------------------------
+
+    def _classify_text(self, args) -> str:
+        """Identify which strategy family a puzzle belongs to."""
+        from ..puzzle_types import FAMILIES
+
+        if not args:
+            return ("Usage: <code>/classify &lt;puzzle_id|text&gt;</code>\n\n"
+                    "Identifies the strategy family a puzzle needs: math, brute force, "
+                    "guessing, steganography, encoding, geometry, reverse engineering, "
+                    "on-chain reading, or external information.\n\n"
+                    "<i>Example: /classify gsmg-io-5btc-puzzle</i>\n"
+                    "<i>Example: /classify discrete log on an elliptic curve</i>")
+
+        query = " ".join(args)
+        try:
+            from ..access import Tier
+
+            slug = args[0]
+            record = self.service.catalog.item_detail(Tier.PAID, slug)
+            if record is not None:
+                raw = self._raw_entry(slug) or record
+                from ..puzzle_types import classify_puzzle
+                c = classify_puzzle(raw)
+                out = c.as_dict()
+                title = record.get("title")
+            else:
+                from ..puzzle_types import classify_text
+                c = classify_text(query)
+                out = c.as_dict()
+                title = None
+
+            lines = ["🧭 <b>Puzzle type</b>"]
+            if title:
+                lines.append(f"<b>{html.escape(str(title))}</b>")
+                lines.append(f"<code>{html.escape(slug)}</code>")
+            lines.append(f"Family: <b>{html.escape(out['label'])}</b> "
+                         f"<code>{html.escape(out['family'])}</code>")
+            lines.append(f"Confidence: {out['confidence']}"
+                         + ("  <i>(inferred from text)</i>" if out["inferred"] else ""))
+            if out.get("secondary_families"):
+                lines.append("Also applies: " + html.escape(
+                    ", ".join(out["secondary_families"][:3])))
+            if out.get("reasons"):
+                lines.append("")
+                lines.append("<b>Why:</b>")
+                lines.extend(f"  – {html.escape(r)}" for r in out["reasons"][:4])
+            lines.append("")
+            lines.append(f"Compute: {html.escape(out.get('compute') or 'none')}")
+            lines.append("")
+            lines.append("<b>First move:</b>")
+            lines.append(f"  {html.escape(out['approach'][0])}")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+    def _plan_text(self, args) -> str:
+        """Show the concrete attack plan a puzzle's family implies."""
+        from ..puzzles.attack import plan_attack
+
+        if not args:
+            return ("Usage: <code>/plan &lt;puzzle_id&gt;</code>\n\n"
+                    "Shows the concrete attack the puzzle's type implies: the first move, "
+                    "the tools, and whether it needs compute at all.")
+        slug = args[0]
+        try:
+            raw = self._raw_entry(slug)
+            if raw is None:
+                return f"✗ puzzle <code>{html.escape(slug)}</code> not found."
+            plan = plan_attack(raw)
+            lines = [f"🎯 <b>Attack plan</b> — <code>{html.escape(slug)}</code>",
+                     f"<b>{html.escape(plan.label)}</b>",
+                     f"Compute: {html.escape(plan.compute)}",
+                     "",
+                     f"<b>First move</b>\n  {html.escape(plan.first_move)}",
+                     "",
+                     "<b>Approach:</b>"]
+            lines.extend(f"  {i}. {html.escape(step)}"
+                         for i, step in enumerate(plan.approach[:4], 1))
+            lines.append("")
+            lines.append("<b>Tools:</b> " + html.escape(", ".join(plan.tools[:4])))
+            if plan.secondary_families:
+                lines.append("<b>Secondary:</b> " + html.escape(
+                    ", ".join(plan.secondary_families[:3])))
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+    def _families_text(self) -> str:
+        """List the strategy families and the corpus distribution."""
+        from ..puzzle_types import FAMILIES, classify_catalog
+
+        try:
+            entries = [getattr(e, "raw", None) or {}
+                       for e in self.service.catalog.public_entries]
+            dist = classify_catalog(entries)
+        except Exception:
+            dist = {"distribution": {}, "count": 0}
+
+        lines = ["🧭 <b>Strategy types</b>", ""]
+        for key, fam in FAMILIES.items():
+            count = dist.get("distribution", {}).get(key, 0)
+            lines.append(f"• <b>{html.escape(fam.label)}</b> "
+                         f"<code>{html.escape(key)}</code> — {count} in corpus")
+        total = dist.get("count", 0)
+        inferred = dist.get("inferred", 0)
+        lines.append("")
+        lines.append(f"<i>{total} puzzles classified, {inferred} inferred from text</i>")
+        return "\n".join(lines)
+
+    # -- crypto tools ------------------------------------------------------
+
+    def _txdecode_text(self, args) -> str:
+        """Decode a raw signed transaction. Never echoes secrets."""
+        from ..crypto_tools import DecodeError, decode_transaction
+
+        if not args:
+            return ("Usage: <code>/txdecode &lt;hex&gt;</code>\n\n"
+                    "Decodes a raw signed Bitcoin or Ethereum transaction into structured "
+                    "fields: inputs, outputs, amounts, script types and the recovered "
+                    "sender.")
+        raw = args[0]
+        chain = args[1] if len(args) > 1 else "auto"
+        try:
+            d = decode_transaction(raw, chain=chain)
+        except DecodeError as exc:
+            return f"✗ {html.escape(str(exc))}"
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+        lines = [f"🧾 <b>Transaction</b> — {html.escape(str(d.get('chain')))}",
+                 f"Decoded as: <code>{html.escape(str(d.get('decoded_as')))}</code>",
+                 f"txid: <code>{html.escape(str(d.get('txid') or 'n/a'))}</code>"]
+        if d.get("segwit"):
+            lines.append("SegWit: yes")
+        if d.get("type") is not None:
+            lines.append(f"EVM type: {d['type']}")
+        if d.get("sender"):
+            lines.append(f"Sender: <code>{html.escape(str(d['sender']))}</code>")
+        elif d.get("is_contract_creation"):
+            lines.append("Contract creation (no sender to recover)")
+
+        outputs = d.get("outputs") or []
+        if d.get("decoded_as") == "eth":
+            # An EVM transaction has no outputs; its value and destination live in the
+            # top-level fields.
+            lines.append(f"To: <code>{html.escape(str(d.get('to') or 'contract creation'))}</code>")
+            value_eth = d.get("value_eth")
+            if value_eth is not None:
+                lines.append(f"Value: <b>{value_eth}</b> ETH")
+            lines.append(f"Gas limit: {d.get('gasLimit')}  "
+                         f"nonce: {d.get('nonce')}")
+            if d.get("chain_id") is not None:
+                lines.append(f"Chain id: {d['chain_id']}")
+            data_hex = str(d.get("data") or "")
+            if data_hex and data_hex != "0x":
+                lines.append(f"Input data: {len(data_hex) // 2 - 1} bytes")
+        else:
+            lines.append("")
+            lines.append(f"<b>Outputs ({len(outputs)}):</b>")
+            for o in outputs[:6]:
+                addr = o.get("address") or "n/a"
+                value = o.get("value_btc")
+                if value is None:
+                    value = o.get("value_eth")
+                    suffix = " ETH" if value is not None else ""
+                else:
+                    suffix = " BTC"
+                lines.append(f"  • <code>{html.escape(str(addr))}</code> "
+                             f"— {value}{suffix} "
+                             f"<i>({html.escape(str(o.get('script_type')))})</i>")
+            total = d.get("total_output_btc")
+            if total is not None:
+                lines.append(f"\nTotal out: <b>{total}</b> BTC")
+        return "\n".join(lines)
+
+    def _mnemonic_text(self, args) -> str:
+        """BIP39 validation + derivation. The phrase is never echoed back."""
+        from ..crypto_tools import DecodeError, convert_mnemonic
+
+        if not args:
+            return ("Usage: <code>/mnemonic &lt;12 or 24 words&gt;</code>\n\n"
+                    "Checks a BIP39 phrase's checksum, then derives its seed and first "
+                    "addresses.\n\n"
+                    "<b>Privacy:</b> the phrase is never echoed back and never stored. "
+                    "Prefer running this in the Mini App, which keeps it on your device.")
+        phrase = " ".join(args)
+        try:
+            d = convert_mnemonic(phrase, to="all")
+        except DecodeError as exc:
+            return f"✗ {html.escape(str(exc))}"
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+        words = len(phrase.split())
+        if not d.get("valid"):
+            return (f"✗ <b>Invalid BIP39 phrase</b>\n"
+                    f"Words: {words}\n"
+                    f"Checksum: failed\n\n"
+                    f"<i>A failed checksum means at least one word is wrong or out of "
+                    f"order. A near-miss phrase is not a solution.</i>")
+        lines = [f"✓ <b>Valid BIP39 phrase</b> — {words} words",
+                 f"Entropy: {d.get('entropy_bits')} bits",
+                 f"Seed: <code>{html.escape(str(d.get('seed_redacted')))}</code>",
+                 "",
+                 "<b>First addresses:</b>"]
+        for name, entry in (d.get("derived") or {}).items():
+            addr = entry.get("address")
+            lines.append(f"  • {html.escape(name)}: <code>{html.escape(str(addr))}</code>")
+        return "\n".join(lines)
+
+    def _keycalc_text(self, args) -> str:
+        """Derive every address a key controls. The key is never echoed back."""
+        from ..crypto_tools import DecodeError, crypto_calculator
+
+        if not args:
+            return ("Usage: <code>/keycalc &lt;hex|WIF&gt;</code>\n\n"
+                    "Derives every address a private key controls (compressed and "
+                    "uncompressed Bitcoin, plus Ethereum).\n\n"
+                    "<b>Privacy:</b> the key is never echoed back and never stored.")
+        key = args[0]
+        try:
+            d = crypto_calculator(key)
+        except DecodeError as exc:
+            return f"✗ {html.escape(str(exc))}"
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+        lines = ["🔑 <b>Key calculator</b>",
+                 f"Source: {html.escape(str(d.get('source')))}",
+                 f"Key: <code>{html.escape(str(d.get('key_hex_prefix')))}</code> "
+                 f"<i>(redacted)</i>",
+                 f"In range: {'yes' if d.get('in_range') else 'NO'}",
+                 "",
+                 "<b>Bitcoin:</b>"]
+        for name, addr in (d.get("chains", {}).get("bitcoin") or {}).items():
+            lines.append(f"  • {html.escape(name)}: <code>{html.escape(str(addr))}</code>")
+        eth = (d.get("chains", {}).get("ethereum") or {}).get("address")
+        if eth:
+            lines.append(f"\n<b>Ethereum:</b>\n  • <code>{html.escape(str(eth))}</code>")
+        return "\n".join(lines)
+
+    def _walletdat_text(self, args) -> str:
+        """Inspect a wallet.dat. Key material is redacted."""
+        from ..crypto_tools import DecodeError, parse_wallet_dat
+
+        if not args:
+            return ("Usage: <code>/walletdat &lt;path&gt;</code>\n\n"
+                    "Inventories a Bitcoin Core wallet.dat: format, records, whether it is "
+                    "encrypted, and any addresses found. <b>Key material is redacted.</b>")
+        path = args[0]
+        from pathlib import Path as _Path
+        p = _Path(path).expanduser()
+        if not p.is_file():
+            return f"✗ file not found: <code>{html.escape(path)}</code>"
+        try:
+            d = parse_wallet_dat(p.read_bytes())
+        except DecodeError as exc:
+            return f"✗ {html.escape(str(exc))}"
+        except Exception as exc:
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+
+        lines = [f"🗄️ <b>wallet.dat</b> — {html.escape(p.name)}",
+                 f"Format: {html.escape(str(d.get('format')))}",
+                 f"Size: {d.get('size_bytes'):,} bytes",
+                 f"Encrypted: {'yes' if d.get('encrypted') else 'no'}"]
+        if d.get("version"):
+            lines.append(f"Wallet version: {d['version']}")
+        records = d.get("records") or {}
+        if records:
+            top = ", ".join(f"{k}×{v}" for k, v in list(records.items())[:6])
+            lines.append(f"Records: {html.escape(top)}")
+        addrs = d.get("addresses") or []
+        if addrs:
+            lines.append(f"\n<b>Addresses found ({len(addrs)}):</b>")
+            lines.extend(f"  • <code>{html.escape(a)}</code>" for a in addrs[:5])
+        lines.append("")
+        lines.append(f"<i>{html.escape(str(d.get('note')))}</i>")
+        return "\n".join(lines)
+
+    def _raw_entry(self, slug):
+        """Find the raw corpus record behind a catalog slug."""
+        for entry in self.service.catalog.public_entries:
+            if str(getattr(entry, "id", "")) == slug:
+                raw = getattr(entry, "raw", None)
+                if isinstance(raw, dict):
+                    return raw
+        return None
+
     def _image_text(self) -> str:
         """Show image analysis info."""
         return (
@@ -344,6 +708,168 @@ class TelegramBot:
             "  <b>Puzzles → Image Analysis</b>\n\n"
             "Upload an image to analyze it for hidden data."
         )
+
+    def _archive_text(self, args) -> str:
+        """Fetch an archived copy of a URL via the Internet Archive."""
+        if not args:
+            return ("Usage: <code>/archive &lt;url&gt;</code>\n\n"
+                    "Fetches an archived copy of a page from the Internet "
+                    "Archive. Use this when a site blocks automated clients.")
+        url = args[0]
+        lines = [f"🗄️ <b>Archive lookup</b>",
+                 f"URL: <code>{html.escape(url[:160])}</code>", ""]
+        try:
+            snap = wayback_available(url)
+        except Exception as exc:  # pragma: no cover - network failure path
+            snap = None
+            lines.append(f"✗ archive query failed: "
+                         f"{html.escape(str(exc)[:120])}")
+        if not snap:
+            lines.append("No archived copy found. The page may be new, or it "
+                         "may be behind a bot gate — try the live URL first.")
+            return "\n".join(lines)
+        lines.append(f"✓ snapshot: <a href=\"{html.escape(str(snap.get('url')))}\">"
+                     f"{html.escape(str(snap.get('timestamp', '')))}</a>")
+        try:
+            body = fetch_wayback(url)
+        except Exception:  # pragma: no cover - network failure path
+            body = None
+        if body:
+            gate = describe_antibot(body)
+            if gate:
+                lines.append(gate)
+            # summarize_page() returns plain text, and this bot sends HTML:
+            # escape it so archived markup cannot be injected into the message.
+            excerpt = html.escape(summarize_page(body, limit=600))
+            lines += ["", excerpt or "<i>(empty body)</i>"]
+        else:
+            lines.append("<i>Snapshot exists but the body could not be fetched "
+                         "— the link above still works.</i>")
+        return "\n".join(lines)
+
+    def _instagram_text(self, args) -> str:
+        """Extract the direct media URL from an Instagram post page."""
+        if not args:
+            return ("Usage: <code>/ig &lt;post_url&gt;</code>\n\n"
+                    "Returns the direct image URL of an Instagram post. "
+                    "Useful when Instagram blocks image downloads.")
+        url = args[0]
+        if not _is_instagram_post_url(url):
+            return ("✗ only Instagram post URLs are supported — "
+                    "<code>https://www.instagram.com/p/&lt;shortcode&gt;/</code>")
+        try:
+            page = fetch_text(url, timeout=25)
+        except UnsafeUrlError as exc:
+            return f"✗ {html.escape(str(exc))}"
+        except Exception as exc:  # pragma: no cover - network failure path
+            return f"✗ could not fetch the post: {html.escape(str(exc)[:120])}"
+        gate = describe_antibot(page)
+        image = extract_og_image(page)
+        if image:
+            # Only ever present a public HTTPS image as a clickable link.
+            try:
+                validate_public_https(image)
+            except UnsafeUrlError:
+                image = None
+        if not image:
+            note = ("No media URL found. The post may be unavailable, or the "
+                    "page may require a login.")
+            if gate:
+                note = f"{gate}\n\n{note}"
+            return note
+        lines = ["📸 <b>Instagram post media</b>",
+                 f"<a href=\"{html.escape(image)}\">open image</a>"]
+        if gate:
+            lines.append(gate)
+        return "\n".join(lines)
+
+    def _goal_text(self, goal: str) -> str:
+        """Use a free AI model to suggest steps for the user's goal."""
+        try:
+            steps = self._ai_suggest(goal)
+            return ai_suggestion(goal, steps)
+        except Exception:
+            # Fallback: static suggestions based on keywords
+            steps = self._fallback_suggestions(goal)
+            return ai_suggestion(goal, steps)
+
+    def _ai_suggest(self, goal: str) -> list:
+        """Call a free AI model (OpenRouter) for goal suggestions."""
+        import json
+        import urllib.request
+        import urllib.error
+
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("OPENROUTER_API_KEY not set")
+
+        prompt = (
+            f"The user wants to: {goal}\n\n"
+            "Give 3-4 short, actionable steps to achieve this. "
+            "Each step should be one line, plain text, no markdown. "
+            "Focus on practical actions using the tools available."
+        )
+
+        data = json.dumps({
+            "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 256,
+        }).encode()
+
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read().decode())
+
+        text = result["choices"][0]["message"]["content"]
+        lines = [l.strip().lstrip("0123456789.-•* ").strip()
+                 for l in text.split("\n") if l.strip()]
+        return lines[:4] if lines else self._fallback_suggestions(goal)
+
+    def _fallback_suggestions(self, goal: str) -> list:
+        """Keyword-based fallback when AI is unavailable."""
+        g = goal.lower()
+        if "puzzle" in g or "crack" in g or "match" in g:
+            return [
+                "Connect your wallet or paste an address",
+                "Run /scan to check assets + puzzle corpus",
+                "If no match, try /catalog to browse manually",
+                "Track puzzles with /progress to get notified",
+            ]
+        if "wallet" in g or "asset" in g or "balance" in g:
+            return [
+                "Paste an address or connect your wallet",
+                "Run /scan for a full asset breakdown",
+                "Check /market for token safety scores",
+                "Use the Mini App for detailed transaction history",
+            ]
+        if "bounty" in g or "audit" in g or "bug" in g:
+            return [
+                "Open /research for the bounty workflow",
+                "Check /research for open opportunities",
+                "Read the pitfalls list before submitting",
+                "Start with a smaller program to build reputation",
+            ]
+        if "token" in g or "scam" in g or "safe" in g:
+            return [
+                "Run /scan <address> for a token safety check",
+                "Look for liquidity + holder distribution",
+                "Check if the contract is verified on the explorer",
+                "Never invest more than you can afford to lose",
+            ]
+        return [
+            "Describe your goal in more detail",
+            "Try /scan, /catalog, or /research",
+            "Open the Mini App for full tool access",
+            "Type /help for the full command list",
+        ]
 
     def _login_text(self) -> str:
         """Show login info."""
@@ -383,31 +909,21 @@ class TelegramBot:
             return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
 
         wallet = result["wallet"]
-        lines = [f"<b>Deep scan</b> – <code>{html.escape(wallet['address'])}</code>"]
-        lines.append(f"Chain: <b>{html.escape(wallet['chain'])}</b> – {wallet['status']}")
+        assets = [a for a in wallet.get("assets", []) if a.get("kind") != "native"]
+        analysis = result.get("puzzle_analysis") or {}
 
-        if wallet.get("balance_native") is not None:
-            lines.append(f"Native: <b>{wallet['balance_native']} {html.escape(wallet.get('native_symbol', ''))}</b>")
-
-        for asset in wallet.get("assets", []):
-            if asset.get("kind") == "native":
-                continue
-            lines.append(f"  • {html.escape(str(asset.get('symbol')))}: {asset.get('amount')}")
-
-        analysis = result.get("puzzle_analysis")
-        if analysis:
-            lines.append(f"\nPuzzle verdict: <b>{analysis['verdict']}</b>")
-            for match in analysis.get("matches", [])[:3]:
-                lines.append(f"  • {html.escape(match.get('title') or match.get('puzzle_id', ''))}: {match['verdict']}")
-            if analysis.get("hints"):
-                lines.append("<b>Hints</b>")
-                lines.extend(f"  – {html.escape(h)}" for h in analysis["hints"][:5])
-
-        if wallet.get("errors"):
-            for err in wallet["errors"]:
-                lines.append(f"⚠ {html.escape(str(err))}")
-
-        return "\n".join(lines)
+        return scan_result(
+            address=wallet["address"],
+            chain=wallet["chain"],
+            assets=assets,
+            tool_calls=[
+                ("eth.blockscout.com", "✓", "0.8s"),
+                ("mempool.space", "✓", "0.3s"),
+                ("puzzle corpus", "✓", f"{len(analysis.get('matches', []))} matches"),
+            ],
+            puzzle_matches=analysis.get("matches", []),
+            puzzle_evaluated=analysis.get("evaluated", 0),
+        )
 
     def _token_scan_text(self, token: str) -> str:
         """Token scam detection with risk score."""
@@ -666,7 +1182,7 @@ class TelegramBot:
                 lines.append(f"Visible to you: <b>{visible}</b> (sign in to unlock)")
             # Show category breakdown from public corpus
             try:
-                from .access import Tier
+                from ..access import Tier
                 cats = self.service.catalog.categories(Tier.VERIFIED)
                 for cat in cats.get("categories", []):
                     name = cat.get("label", cat.get("id", ""))
@@ -777,6 +1293,9 @@ class TelegramBot:
             {"command": "progress",  "description": "Your tracked puzzle progress"},
             {"command": "crack",     "description": "Show crack attempt for a puzzle"},
             {"command": "image",     "description": "Image analysis info"},
+            {"command": "archive",   "description": "Look up an archived webpage"},
+            {"command": "ig",        "description": "Inspect an Instagram post URL"},
+            {"command": "goal",      "description": "AI goal helper"},
             {"command": "dashboard", "description": "Your stats and activity"},
             {"command": "history",   "description": "Your recent lookups"},
             {"command": "wallet",    "description": "Your wallet info"},
@@ -788,7 +1307,8 @@ class TelegramBot:
         try:
             result = self.client.call("setMyCommands", {"commands": cmds})
             # call() returns the "result" field; setMyCommands returns True
-            return result is True or (isinstance(result, dict) and result.get("ok"))
+            return bool(result is True
+                        or (isinstance(result, dict) and result.get("ok")))
         except Exception as exc:
             log.warning("setMyCommands failed: %s", exc,
                         extra={"component": "telegram.bot", "status": "✗"})

@@ -24,7 +24,7 @@ MNEMONIC = ("legal winner thank year wave sausage worth useful legal winner than
             "yellow")
 BOT_TOKEN = "8881860201:AAHfakeTokenValuexxxxxxxxxxxxxxxxxxxx"
 OPENAI = "sk-proj-AbCdEf0123456789AbCdEf0123456789"
-STRIPE = "TEST_STRIPE_KEY_FAKE_VALUE"
+STRIPE = "sk_test_FAKEKEY0000000000"
 XPRV = "xprv" + "A" * 108
 AWS = "AKIAIOSFODNN7EXAMPLE"
 PEM = "-----BEGIN RSA PRIVATE KEY-----"

@@ -21,6 +21,135 @@ log = get_logger()
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
+# --- chi-square distribution (regularized incomplete gamma) ---------------
+#
+# The Westfeld chi-square attack needs a p-value, and getting the p-value right means
+# getting the degrees of freedom right.  There are 128 value pairs, so df = 127 -- not 1.
+# Using df = 1 (the single-pair case) makes every image look anomalous.
+
+
+def _gammln(xx: float) -> float:
+    """log(gamma(xx)) for xx > 0 (Lanczos-free, Numerical Recipes form)."""
+    cof = (76.18009172947146, -86.50532032941677, 24.01409824083091,
+           -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5)
+    x = xx
+    y = xx
+    tmp = x + 5.5
+    tmp -= (x + 0.5) * __import__("math").log(tmp)
+    ser = 1.000000000190015
+    for c in cof:
+        y += 1.0
+        ser += c / y
+    return -tmp + __import__("math").log(2.5066282746310005 * ser / x)
+
+
+def _gammp_series(a: float, x: float) -> float:
+    """Regularized lower incomplete gamma P(a, x), series expansion."""
+    from math import exp, log
+    if x <= 0.0:
+        return 0.0
+    ap = a
+    total = 1.0 / a
+    delta = total
+    for _ in range(10000):
+        ap += 1.0
+        delta *= x / ap
+        total += delta
+        if abs(delta) < abs(total) * 1e-15:
+            break
+    return total * exp(-x + a * log(x) - _gammln(a))
+
+
+def _gammq_cf(a: float, x: float) -> float:
+    """Regularized upper incomplete gamma Q(a, x), continued fraction."""
+    from math import exp, log
+    tiny = 1e-300
+    b = x + 1.0 - a
+    c = 1.0 / tiny
+    d = 1.0 / b
+    h = d
+    for i in range(1, 10000):
+        an = -i * (i - a)
+        b += 2.0
+        d = an * d + b
+        if abs(d) < tiny:
+            d = tiny
+        c = b + an / c
+        if abs(c) < tiny:
+            c = tiny
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < 1e-15:
+            break
+    return exp(-x + a * log(x) - _gammln(a)) * h
+
+
+def _chi2_sf(x: float, df: int) -> float:
+    """Survival function P(X >= x) for a chi-square variable with ``df`` degrees."""
+    if df <= 0:
+        return 1.0
+    if x <= 0.0:
+        return 1.0
+    a = df / 2.0
+    z = x / 2.0
+    if z < a + 1.0:
+        return 1.0 - _gammp_series(a, z)
+    return _gammq_cf(a, z)
+
+
+def _lsb_chi_square(values: list) -> Dict[str, Any]:
+    """Westfeld chi-square attack on one channel's pixel values.
+
+    Group the values into pairs ``(2i, 2i+1)``.  A natural image does not have equal
+    counts in the two halves of a pair -- adjacent pixel values are correlated, so the
+    low bit carries image structure.  Writing random data into the low bit destroys that
+    structure and drives the two halves toward equality.
+
+    The statistic is
+
+        chi2 = sum_i (P(2i) - E_i)^2 / E_i ,   E_i = (P(2i) + P(2i+1)) / 2
+
+    with ``df = usable_pairs - 1`` (127 for a full 8-bit channel).  The p-value is the
+    upper-tail probability; a *small* p-value means the pairs are far more imbalanced
+    than random, which is the natural-image case, while a *large* p-value means the pairs
+    are as balanced as random data would make them.
+
+    Read it as a screen, not a verdict: it has false positives (smooth gradients, heavy
+    compression, already-random content) and false negatives (partial or adaptive
+    embedding), and it says nothing about what -- if anything -- is hidden.
+    """
+    counts = [0] * 256
+    for v in values:
+        if 0 <= v < 256:
+            counts[v] += 1
+
+    chi2 = 0.0
+    usable = 0
+    for i in range(0, 256, 2):
+        a, b = counts[i], counts[i + 1]
+        expected = (a + b) / 2.0
+        if expected <= 0:
+            continue
+        usable += 1
+        chi2 += (a - expected) ** 2 / expected
+
+    df = max(usable - 1, 1)
+    p_value = _chi2_sf(chi2, df)
+
+    return {
+        "chi2": round(chi2, 2),
+        "df": df,
+        "pairs": usable,
+        "p_value": round(p_value, 6),
+        "balanced": p_value > 0.95,
+        "suspicious": p_value > 0.95,
+        "note": ("upper-tail p-value over df=127; a LARGE p means the pairs are as "
+                 "balanced as random data would make them, a SMALL p means the low bit "
+                 "still carries image structure"),
+    }
+
+
 def analyze_file(path: str) -> Dict[str, Any]:
     """Analyze a file from local storage. Read-only, size-limited."""
     p = Path(path).expanduser()
@@ -365,27 +494,62 @@ def analyze_image(filename: str = "", base64_data: str = "") -> Dict[str, Any]:
     elif data[:4] == b"\x50\x4b\x03\x04":
         file_type = "zip"
 
-    # LSB steganography detection
+    # LSB steganography detection -- over DECODED PIXELS, never file bytes.
+    #
+    # The previous implementation read the first 1000 *file* bytes.  That is meaningless
+    # for every format this branch claims to cover: a PNG's first kilobyte is a container
+    # header plus a compressed IDAT stream, and a JPEG's is a marker table plus entropy-
+    # coded data.  Their bit distribution says nothing about steganography, so the old
+    # ratio test was measuring the container, not the image.
+    #
+    # What follows is the published Westfeld chi-square attack: LSB embedding forces the
+    # two members of each pixel-value pair (2i, 2i+1) toward equal frequency, which a
+    # natural image does not have.  It is a statistical test -- it has false positives and
+    # false negatives, and it says nothing about *what* is embedded.
     lsb_detected = False
     lsb_details = []
-    if file_type in ("png", "bmp", "tiff"):
-        # Check LSB of first 1000 bytes for non-random patterns
-        lsb_bits = [b & 1 for b in data[:1000]]
-        lsb_ones = sum(lsb_bits)
-        lsb_ratio = lsb_ones / len(lsb_bits) if lsb_bits else 0
-        # If LSB ratio is very high or very low, might indicate steganography
-        if lsb_ratio > 0.8 or lsb_ratio < 0.2:
-            lsb_detected = True
-            lsb_details.append(f"LSB ratio: {lsb_ratio:.3f} (suspicious)")
-        else:
-            lsb_details.append(f"LSB ratio: {lsb_ratio:.3f} (normal)")
+    lsb_analysis: Dict[str, Any] = {}
 
-        # Check for common steganography signatures
+    pixels = None
+    if file_type in ("png", "bmp", "tiff", "jpeg", "gif", "webp"):
+        try:
+            import io
+
+            from PIL import Image
+
+            with Image.open(io.BytesIO(data)) as im:
+                im = im.convert("RGB")
+                # Sample a bounded number of pixels: the statistic needs enough counts
+                # per pair to mean anything, not the whole image.
+                w, h = im.size
+                pixels = list(im.getdata())[:200_000]
+                lsb_details.append(f"decoded {w}x{h} {file_type.upper()}, "
+                                   f"analysing {len(pixels):,} pixels")
+        except Exception as exc:
+            lsb_details.append(f"could not decode image for pixel analysis: "
+                               f"{type(exc).__name__}: {exc}")
+    else:
+        lsb_details.append(f"pixel LSB analysis not applicable for {file_type}")
+
+    if pixels:
+        for idx, channel in enumerate(("red", "green", "blue")):
+            values = [px[idx] for px in pixels]
+            stat = _lsb_chi_square(values)
+            lsb_analysis[channel] = stat
+            if stat["balanced"]:
+                verdict = "as balanced as random data (look closer)"
+            else:
+                verdict = "low bit still carries image structure"
+            lsb_details.append(
+                f"{channel}: chi2={stat['chi2']:.1f} df={stat['df']} "
+                f"p={stat['p_value']:.4f} -- {verdict}")
+            if stat["suspicious"]:
+                lsb_detected = True
+        # Container-level signatures are still worth reporting, but as a separate,
+        # weaker signal than a pixel statistic.
         if b"steg" in data[:5000].lower():
             lsb_detected = True
-            lsb_details.append("Found 'steg' signature in header")
-    else:
-        lsb_details.append(f"LSB analysis not applicable for {file_type}")
+            lsb_details.append("found 'steg' string in the first 5KB")
 
     # Metadata extraction
     metadata = {}
@@ -493,6 +657,7 @@ def analyze_image(filename: str = "", base64_data: str = "") -> Dict[str, Any]:
         "file_type": file_type,
         "size": size,
         "lsb_detected": lsb_detected,
+        "lsb_analysis": lsb_analysis,
         "metadata": metadata,
     }
 

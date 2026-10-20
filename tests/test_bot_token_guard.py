@@ -236,6 +236,11 @@ class TestRunBotIntegration:
         env["HERMES_GATEWAY_ENV_FILES"] = str(fake_gw)
         env["PY"] = "/bin/false"          # cannot start a bot even if reached
         env.pop("SKIP_TOKEN_CHECK", None)
+        # Isolate the script's state directory.  Without this the duplicate-supervisor
+        # check at the top of run_bot.sh short-circuits against whatever supervisor is
+        # already running on the machine (exit 0) and the token guard is never reached,
+        # so the test passes or fails depending on machine state instead of on the guard.
+        env["BOT_RUN_DIR"] = str(tmp_path / "run")
 
         before = set(_bot_pids())
 

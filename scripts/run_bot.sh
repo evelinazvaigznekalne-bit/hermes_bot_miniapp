@@ -12,7 +12,11 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 PY="${PYTHON:-/data/data/com.termux/files/usr/bin/python3}"
-RUN_DIR="$PROJECT_DIR/.run"
+# BOT_RUN_DIR lets a caller (a test, a second instance) use its own state directory so
+# the duplicate-supervisor check cannot short-circuit against a supervisor that is
+# legitimately running elsewhere.  Defaults to the project's own .run, so normal use and
+# the watchdog are unchanged.
+RUN_DIR="${BOT_RUN_DIR:-$PROJECT_DIR/.run}"
 LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 
@@ -79,7 +83,8 @@ command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
 backoff=5
 while true; do
   echo "$(date -u +%FT%TZ) starting bot" >> "$LOG_DIR/bot.out"
-  "$PY" -m app.bot_main >> "$LOG_DIR/bot.out" 2>&1 &
+  # Launch bot in its OWN session so it survives Android killing the supervisor.
+  setsid "$PY" -m app.bot_main >> "$LOG_DIR/bot.out" 2>&1 < /dev/null &
   bot_pid=$!
   echo "$bot_pid" > "$RUN_DIR/bot.pid"
   wait "$bot_pid"
