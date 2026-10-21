@@ -132,6 +132,62 @@ class TestDecodeTransactionEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# Transaction decoder serialization (v, r, s as hex strings)
+# ---------------------------------------------------------------------------
+
+class TestDecodeTransactionSerialization:
+    """Ensure byte-valued v, r, s fields are serialized as hex strings."""
+
+    def test_eth_v_r_s_are_strings(self, api):
+        r = api.tools_decode_transaction({"raw": LEGACY_ETH_TX})
+        assert r["decoded_as"] == "eth"
+        for key in ("v", "r", "s"):
+            assert key in r, f"missing {key}"
+            assert isinstance(r[key], str), f"{key} must be string, got {type(r[key])}"
+            # v should be a hex string like "25", r and s should be 64-char hex
+            if key == "v":
+                assert len(r[key]) == 2, f"v should be 2-char hex, got {r[key]}"
+                int(r[key], 16)  # valid hex
+            else:
+                assert len(r[key]) == 64, f"{key} should be 64-char hex, got {r[key]}"
+                int(r[key], 16)  # valid hex
+
+    def test_btc_has_no_v_r_s(self, api):
+        r = api.tools_decode_transaction({"raw": BTC_LEGACY})
+        assert r["decoded_as"] == "btc"
+        for key in ("v", "r", "s"):
+            assert key not in r, f"BTC tx should not have {key}"
+
+    def test_eth_result_is_json_serializable(self, live):
+        """The full ETH result must survive ``json.dumps`` -- this is the 500.
+
+        ``decode_transaction`` returns ``v``/``r``/``s`` as raw bytes.  The
+        handler converts them to hex; if that conversion is missing, the
+        stdlib JSON encoder raises ``TypeError`` and the router answers 500.
+        """
+        status, body = _post(live, "/api/tools/decode-transaction",
+                             {"raw": LEGACY_ETH_TX, "chain": "ethereum"})
+        assert status == 200, f"expected 200, got {status}: {body}"
+        assert body["decoded_as"] == "eth"
+        # Round-trip through JSON exactly as the HTTP layer does.
+        json.dumps(body)
+        for key in ("v", "r", "s"):
+            assert isinstance(body[key], str), f"{key} must be hex, got {body[key]!r}"
+
+    def test_eth_sender_is_recovered(self, api):
+        r = api.tools_decode_transaction({"raw": LEGACY_ETH_TX, "chain": "ethereum"})
+        assert r["decoded_as"] == "eth"
+        assert r["sender"] == "0xe75f08b448ce1176b3b7cd2be43181c9e752dfd5"
+
+    def test_eth_route_is_wired(self, live):
+        status, body = _post(live, "/api/tools/decode-transaction",
+                             {"raw": LEGACY_ETH_TX, "chain": "ethereum"})
+        assert status == 200
+        assert body["decoded_as"] == "eth"
+        assert body["value_eth"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
 # Mnemonic
 # ---------------------------------------------------------------------------
 
@@ -318,3 +374,88 @@ class TestPlanAndAttackEndpoints:
         assert status == 200
         assert body["outcome"] in ("match", "infeasible", "uncertified",
                                    "needs_input", "skipped")
+
+
+# ---------------------------------------------------------------------------
+# Seed validation
+# ---------------------------------------------------------------------------
+
+class TestSeedValidateEndpoint:
+    def test_valid_phrase(self, api):
+        r = api.tools_seed_validate(
+            {"phrase": "legal winner thank year wave sausage worth useful legal "
+                       "winner thank yellow"})
+        assert r["valid"] is True
+        assert r["word_count"] == 12
+        assert "error" not in r or r.get("error") is None
+
+    def test_invalid_checksum(self, api):
+        r = api.tools_seed_validate(
+            {"phrase": "legal winner thank year wave sausage worth useful legal "
+                       "winner thank thank"})
+        assert r["valid"] is False
+        assert r["word_count"] == 12
+        assert "error" in r and r["error"] is not None
+
+    def test_invalid_word_count(self, api):
+        r = api.tools_seed_validate({"phrase": "legal winner thank"})
+        assert r["valid"] is False
+        assert r["word_count"] == 3
+        assert "error" in r and r["error"] is not None
+
+    def test_missing_phrase(self, api):
+        r = api.tools_seed_validate({})
+        assert r["valid"] is False
+        assert r["word_count"] == 0
+        assert "error" in r and r["error"] is not None
+
+    def test_route_is_wired(self, live):
+        status, body = _post(live, "/api/tools/seed-validate",
+                             {"phrase": "legal winner thank year wave sausage worth useful legal "
+                                        "winner thank yellow"})
+        assert status == 200
+        assert body["valid"] is True
+        assert body["word_count"] == 12
+
+
+# ---------------------------------------------------------------------------
+# Address derivation
+# ---------------------------------------------------------------------------
+
+class TestDeriveAddressesEndpoint:
+    def test_valid_phrase(self, api):
+        r = api.tools_derive_addresses(
+            {"phrase": "legal winner thank year wave sausage worth useful legal "
+                       "winner thank yellow", "count": 3})
+        assert "btc" in r and "eth" in r
+        assert len(r["btc"]) == 3
+        assert len(r["eth"]) == 3
+        assert "error" not in r or r.get("error") is None
+        # Check structure
+        assert r["btc"][0]["path"] == "m/44'/0'/0'/0/0"
+        assert "p2pkh" in r["btc"][0]
+        assert "p2wpkh" in r["btc"][0]
+        assert r["eth"][0]["path"] == "m/44'/60'/0'/0/0"
+        assert "address" in r["eth"][0]
+        assert r["eth"][0]["address"].startswith("0x")
+
+    def test_invalid_phrase(self, api):
+        r = api.tools_derive_addresses({"phrase": "invalid phrase", "count": 1})
+        assert r["btc"] == []
+        assert r["eth"] == []
+        assert "error" in r and r["error"] is not None
+
+    def test_missing_phrase(self, api):
+        r = api.tools_derive_addresses({})
+        assert r["btc"] == []
+        assert r["eth"] == []
+        assert "error" in r and r["error"] is not None
+
+    def test_route_is_wired(self, live):
+        status, body = _post(live, "/api/tools/derive-addresses",
+                             {"phrase": "legal winner thank year wave sausage worth useful legal "
+                                        "winner thank yellow", "count": 2})
+        assert status == 200
+        assert len(body["btc"]) == 2
+        assert len(body["eth"]) == 2
+        assert "error" not in body or body.get("error") is None

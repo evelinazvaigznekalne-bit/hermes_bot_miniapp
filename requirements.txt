@@ -20,6 +20,15 @@ coincurve>=18.0
 # --- Bitcoin address encoding ---
 base58>=2.1
 
+# --- BIP39 seed phrases (validate_seed_phrase, derive_addresses, convert_mnemonic) ---
+mnemonic>=0.20
+
+# --- Native SegWit (bech32) address encoding ---
+bech32>=1.2.0
+
+# --- Image analysis (LSB steganography / EXIF / entropy) ---
+pillow>=10.0
+
 # --- Tests ---
 pytest>=8.0
 

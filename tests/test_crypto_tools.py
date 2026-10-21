@@ -329,9 +329,68 @@ class TestKeyCalculator:
         assert crypto_calculator("00" * 32)["in_range"] is False
 
     @requires_crypto
-    def test_wif_compressed_is_accepted(self):
+    def test_wif_uncompressed_is_accepted(self):
+        """``5HpHagT65...`` is the uncompressed WIF of scalar 1 (33-byte payload)."""
         c = crypto_calculator("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf")
+        assert c["source"] == "wif_uncompressed"
+        assert c["chains"]["bitcoin"]["p2pkh_compressed"] == SCALAR_ONE_P2PKH
+
+    # -- WIF version prefix (regression) -----------------------------------
+    # WIF is 0x80-prefixed; b58decode_check returns 33 bytes uncompressed and
+    # 34 bytes compressed.  The old length-only dispatch attached 0x80 to the
+    # uncompressed key and rejected the compressed one outright.
+
+    @requires_crypto
+    def test_wif_uncompressed_33_byte_payload_is_accepted(self):
+        """``5HpHagT65...`` is the uncompressed WIF of scalar 1 (33-byte payload)."""
+        c = crypto_calculator("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf")
+        assert c["source"] == "wif_uncompressed"
+        assert c["chains"]["bitcoin"]["p2pkh_compressed"] == SCALAR_ONE_P2PKH
+        assert c["chains"]["ethereum"]["address"] == SCALAR_ONE_ETH
+
+    @requires_crypto
+    def test_wif_compressed_34_byte_payload_is_accepted(self):
+        """``KwDiBf89...`` is the WIF of scalar 1, compressed (34-byte payload)."""
+        c = crypto_calculator("KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn")
         assert c["source"] == "wif_compressed"
+        assert c["chains"]["bitcoin"]["p2pkh_compressed"] == SCALAR_ONE_P2PKH
+        assert c["chains"]["ethereum"]["address"] == SCALAR_ONE_ETH
+
+    @requires_crypto
+    def test_wif_prefix_is_stripped_from_the_key(self):
+        """The 0x80 version byte must not leak into the derived key material.
+
+        If it does, the key is a *different* scalar and yields the wrong
+        addresses -- exactly the failure mode the length-only dispatch produced.
+        """
+        c = crypto_calculator("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf")
+        # A key that still carries 0x80 cannot be the scalar-1 key.
+        assert c["key_length_bytes"] == 32
+        assert c["chains"]["ethereum"]["address"] == SCALAR_ONE_ETH
+        assert c["chains"]["bitcoin"]["p2pkh_compressed"] == SCALAR_ONE_P2PKH
+
+    @requires_crypto
+    def test_wif_payload_and_hex_key_agree(self):
+        """The same key expressed as hex and as WIF must derive identically."""
+        as_hex = crypto_calculator("0" * 63 + "1")
+        as_wif_u = crypto_calculator(
+            "5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf")
+        as_wif_c = crypto_calculator(
+            "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn")
+        for other in (as_wif_u, as_wif_c):
+            assert other["chains"]["ethereum"]["address"] == \
+                as_hex["chains"]["ethereum"]["address"]
+            assert other["chains"]["bitcoin"]["p2pkh_compressed"] == \
+                as_hex["chains"]["bitcoin"]["p2pkh_compressed"]
+
+    @requires_crypto
+    def test_both_wif_forms_still_derives_both_address_kinds(self):
+        """Both WIF forms expose the compressed *and* uncompressed addresses."""
+        for wif in ("5HpHagT65TZzG1PH3CSu63k8DbpvD8s5ip4nEB3kEsreAnchuDf",
+                    "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn"):
+            btc = crypto_calculator(wif)["chains"]["bitcoin"]
+            assert btc["p2pkh_compressed"] == SCALAR_ONE_P2PKH
+            assert btc["p2pkh_uncompressed"] == "1EHNa6Q4Jz2uvNExL497mE43ikXhwF6kZm"
 
     @requires_crypto
     def test_compressed_and_uncompressed_are_different_addresses(self):

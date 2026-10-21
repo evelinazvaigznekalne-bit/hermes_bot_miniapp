@@ -469,6 +469,10 @@ class MiniAppAPI:
             result = decode_transaction(raw, chain=chain)
         except DecodeError as exc:
             raise ValidationError(str(exc)) from exc
+        # Convert bytes fields to hex for JSON serialization
+        for key in ("v", "r", "s"):
+            if key in result and isinstance(result[key], bytes):
+                result[key] = result[key].hex()
         result["status"] = "✓"
         return result
 

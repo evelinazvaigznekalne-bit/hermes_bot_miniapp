@@ -741,17 +741,31 @@ def crypto_calculator(private_key: str, include_uncompressed: bool = True) -> Di
 
     if priv is None:
         # Not 64 hex chars: try WIF.
+        #
+        # WIF is version-prefixed: b58decode_check yields
+        #   0x80 || <32-byte key>            -> uncompressed  (33 bytes)
+        #   0x80 || <32-byte key> || 0x01    -> compressed    (34 bytes)
+        # The 0x80 prefix must be stripped in *both* cases; matching on the raw
+        # payload length conflated the two (a 33-byte payload was read as a
+        # compressed key with the 0x80 still attached, and a real 34-byte
+        # compressed key was rejected outright as an "unrecognised length").
         try:
             import base58
             decoded = base58.b58decode_check(cleaned)
-            if len(decoded) == 33 and decoded[-1] == 0x01:
-                priv = decoded[:-1]
-                source = "wif_compressed"
-            elif len(decoded) == 32:
-                priv = decoded
-                source = "wif_uncompressed"
+            if len(decoded) in (33, 34) and decoded[0] == 0x80:
+                body = decoded[1:]
+                if len(body) == 33 and body[-1] == 0x01:
+                    priv = body[:-1]
+                    source = "wif_compressed"
+                elif len(body) == 32:
+                    priv = body
+                    source = "wif_uncompressed"
+                else:
+                    raise DecodeError(
+                        f"unrecognised WIF payload length {len(decoded)}")
             else:
-                raise DecodeError(f"unrecognised WIF payload length {len(decoded)}")
+                raise DecodeError(
+                    f"unrecognised WIF payload length {len(decoded)}")
         except DecodeError:
             raise
         except Exception as exc:
