@@ -10,19 +10,49 @@ Make the Hermes Wallet Inspector available to other users on free cloud platform
 
 ## Option 1: Render (Recommended — Easiest)
 
-1. **Fork this repo** on GitHub
-2. **Create Render account** at [render.com](https://render.com) (free)
-3. **New Web Service** → Connect your forked repo
-4. **Configure:**
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `python3 -m app.main --host 0.0.0.0 --port $PORT`
-   - Plan: Free
-5. **Set environment variables** in Render dashboard:
-   - `TELEGRAM_BOT_TOKEN` — your bot token
-   - `SESSION_SECRET` — random 32+ char string
-   - `TELEGRAM_WEBAPP_URL` — `https://your-app-name.onrender.com`
-6. **Deploy** — Render gives you a public URL in ~2 minutes
-7. **Update Telegram bot** with the new URL via @BotFather
+The repo carries a `Dockerfile` and a `render.yaml` Blueprint, so Render builds a
+Docker image. The start command binds `0.0.0.0:${PORT:-10000}` — Render injects `PORT`
+(default `10000`) and cannot reach a service bound to `127.0.0.1` or a hardcoded port.
+
+1. **Push** the repo to GitHub (already done — remote
+   `github.com/evelinazvaigznekalne-bit/hermes_bot_miniapp`, branch `master`).
+2. **Create a Render account** at [render.com](https://render.com) (free).
+3. **New → Web Service →** connect the GitHub repo (or pick it from a Blueprint prompt
+   if you keep `render.yaml`).
+4. Render auto-detects the Dockerfile. Confirm:
+   - Runtime: **Docker**
+   - Health Check Path: `/health`
+   - Plan: **Free** (see the cold-start note below)
+5. **Set environment variables** (Dashboard → service → Environment). These are
+   secrets — they are deliberately absent from `render.yaml` and from the repo:
+
+   | Variable | Required | Value |
+   |---|---|---|
+   | `TELEGRAM_BOT_TOKEN` | yes | from @BotFather |
+   | `SESSION_SECRET` | yes | `openssl rand -hex 32` |
+   | `TELEGRAM_WEBAPP_URL` | yes | `https://<service-name>.onrender.com` |
+   | `MEMEPOL_API_KEY` | no | puzzle comparison; app degrades gracefully without it |
+   | `MEMEPOL_BASE_URL` | no | default `https://api.memepol.example/v1` |
+   | `OCP_DATASET_PATH` | no | leave unset on Render — there is no local `ocp/` repo |
+
+6. **Deploy.** Render builds the image and gives you `https://<name>.onrender.com`.
+7. **Verify:** `curl https://<name>.onrender.com/health` → `{"ok": true, ...}`.
+8. **Register the Mini App URL** with @BotFather (`/newapp`) and set the menu button:
+   `bash scripts/register_miniapp.sh` (uses `.env`; run it locally against the new URL).
+
+### Cold start (Free plan)
+
+Render free web services **spin down after 15 minutes of inactivity**. The first Mini App
+open then waits ~30–60s while the container cold-starts. If that lag matters, change the
+plan to **Starter** in `render.yaml` (`plan: starter`) — the rest of the config is
+unchanged.
+
+### Ephemeral filesystem
+
+Render's filesystem is ephemeral: anything written to `data/` or `logs/` is lost on
+redeploy and spin-up. The app creates those dirs on boot and tolerates their absence, but
+**user sessions and wallet-session state do not survive a restart** on the free plan. Use
+a persistent disk (paid) if that state must persist.
 
 ## Option 2: Railway
 
