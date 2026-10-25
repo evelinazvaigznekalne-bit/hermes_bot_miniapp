@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from ..addresses import validate_evm_address
-from ..errors import ChainAPIError
+from ..errors import ChainAPIError, _safe_exception
 from ..http import HttpClient
 from ..logging_setup import get_logger
 from .base import Asset, AssetReport, ChainProvider
@@ -106,7 +106,7 @@ class EvmProvider(ChainProvider):
             try:
                 data = self.http.post_json(url, provider="eth-rpc", json_body=payload)
             except Exception as exc:  # try the next endpoint
-                last_error = f"{type(exc).__name__}: {exc}"
+                last_error = _safe_exception(exc)
                 continue
             if isinstance(data, dict) and "result" in data:
                 return data["result"]

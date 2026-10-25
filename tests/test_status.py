@@ -150,3 +150,40 @@ class TestLoggingSetup:
         assert secret not in content
         assert "<redacted>" in content
         logging.getLogger("hermes_miniapp").handlers.clear()
+
+
+class TestStatusTrackerSanitization:
+    """StatusTracker must not persist raw exception details."""
+
+    def test_raw_exception_detail_is_sanitized(self, tmp_path):
+        from app.errors import _safe_detail
+        path = tmp_path / "logs" / "status.log"
+        tracker = StatusTracker(path)
+        tracker.fail("assets_chains", "ChainAPIError: blockscout returned HTTP 503 with body ...")
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        record = json.loads(lines[-1])
+        assert record["detail"] == "internal"
+
+    def test_safe_non_exception_detail_preserved(self, tmp_path):
+        path = tmp_path / "logs" / "status.log"
+        tracker = StatusTracker(path)
+        tracker.ok("wallet_data", "verified via signature")
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        record = json.loads(lines[-1])
+        assert record["detail"] == "verified via signature"
+
+    def test_detail_with_credentials_is_sanitized(self, tmp_path):
+        path = tmp_path / "logs" / "status.log"
+        tracker = StatusTracker(path)
+        tracker.fail("assets_chains", "error calling https://rpc.example.com?key=secret123")
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        record = json.loads(lines[-1])
+        assert record["detail"] == "internal"
+
+    def test_detail_with_mnemonic_keyword_is_sanitized(self, tmp_path):
+        path = tmp_path / "logs" / "status.log"
+        tracker = StatusTracker(path)
+        tracker.fail("assets_chains", "invalid mnemonic phrase supplied")
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        record = json.loads(lines[-1])
+        assert record["detail"] == "internal"

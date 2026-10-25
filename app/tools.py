@@ -526,8 +526,9 @@ def analyze_image(filename: str = "", base64_data: str = "") -> Dict[str, Any]:
                 lsb_details.append(f"decoded {w}x{h} {file_type.upper()}, "
                                    f"analysing {len(pixels):,} pixels")
         except Exception as exc:
+            from app.errors import _safe_exception
             lsb_details.append(f"could not decode image for pixel analysis: "
-                               f"{type(exc).__name__}: {exc}")
+                               f"{_safe_exception(exc)}")
     else:
         lsb_details.append(f"pixel LSB analysis not applicable for {file_type}")
 
@@ -666,30 +667,26 @@ def validate_seed_phrase(phrase: str) -> Dict[str, Any]:
     """Validate a BIP39 seed phrase (checksum + wordlist verification).
 
     Returns dict with valid, word_count, and error details.
+    On success: {"valid": true, "word_count": N}
+    On failure: {"valid": false, "word_count": N, "error": "..."}
     """
     from mnemonic import Mnemonic
 
-    result: Dict[str, Any] = {"valid": False, "word_count": 0, "error": None}
-
     words = phrase.strip().lower().split()
-    result["word_count"] = len(words)
+    word_count = len(words)
 
-    if len(words) not in (12, 15, 18, 21, 24):
-        result["error"] = f"Invalid word count: {len(words)} (expected 12, 15, 18, 21, or 24)"
-        return result
+    if word_count not in (12, 15, 18, 21, 24):
+        return {"valid": False, "word_count": word_count, "error": f"Invalid word count: {word_count} (expected 12, 15, 18, 21, or 24)"}
 
     m = Mnemonic("english")
     invalid_words = [w for w in words if w not in m.wordlist]
     if invalid_words:
-        result["error"] = f"Words not in BIP39 wordlist: {', '.join(invalid_words[:5])}"
-        return result
+        return {"valid": False, "word_count": word_count, "error": f"Words not in BIP39 wordlist: {', '.join(invalid_words[:5])}"}
 
     if not m.check(phrase):
-        result["error"] = "Checksum verification failed — invalid seed phrase"
-        return result
+        return {"valid": False, "word_count": word_count, "error": "Checksum verification failed — invalid seed phrase"}
 
-    result["valid"] = True
-    return result
+    return {"valid": True, "word_count": word_count}
 
 
 def derive_addresses(phrase: str, passphrase: str = "",
@@ -701,6 +698,8 @@ def derive_addresses(phrase: str, passphrase: str = "",
       ETH: m/44'/60'/0'/0/i
 
     Returns dict with btc and eth address lists.
+    On success: {"btc": [...], "eth": [...]}
+    On failure: {"btc": [], "eth": [], "error": "..."}
     """
     import hmac as hmac_mod
     from hashlib import sha256, sha512, pbkdf2_hmac
@@ -709,19 +708,15 @@ def derive_addresses(phrase: str, passphrase: str = "",
     import base58
     import bech32
 
-    result: Dict[str, Any] = {"btc": [], "eth": [], "error": None}
-
     try:
         from mnemonic import Mnemonic
         m = Mnemonic("english")
         if not m.check(phrase):
-            result["error"] = "Invalid seed phrase (checksum failed)"
-            return result
+            return {"btc": [], "eth": [], "error": "Invalid seed phrase (checksum failed)"}
 
         seed_bytes = m.to_seed(phrase, passphrase)
     except Exception as e:
-        result["error"] = f"Seed derivation failed: {e}"
-        return result
+        return {"btc": [], "eth": [], "error": f"Seed derivation failed: {e}"}
 
     # BIP32 master key derivation
     I = hmac_mod.new(b"Bitcoin seed", seed_bytes, sha512).digest()
@@ -774,6 +769,8 @@ def derive_addresses(phrase: str, passphrase: str = "",
         return "0x" + addr
 
     H = 0x80000000  # hardened offset
+
+    result: Dict[str, Any] = {"btc": [], "eth": []}
 
     for i in range(count):
         # BTC: m/44'/0'/0'/0/i

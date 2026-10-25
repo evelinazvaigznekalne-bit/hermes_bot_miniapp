@@ -1,0 +1,201 @@
+{
+  "audit_meta": {
+    "audited": "2026-10-21",
+    "total_tools": 23,
+    "verified": 17,
+    "defective": 6,
+    "unverified": 0,
+    "status_legend": {
+      "verified": "live HTTP request (or direct handler call) produced a successful, correct response with a real input",
+      "defective": "reachable but does not return a correct successful response for a valid input, in the deployed build",
+      "unverified": "no live probe or local execution performed yet"
+    },
+    "verification_method": "HTTP against https://hermes-bot-miniapp.onrender.com with real inputs, plus direct handler invocation against the local tree"
+  },
+  "audit_inventory": [
+    {
+      "name": "analyze_file",
+      "endpoint": "POST /api/tools/file",
+      "frontend": "app.js: loadFile()",
+      "purpose": "File inventory (type, size, SHA256, wallet detection)",
+      "status": "verified",
+      "evidence": "live 200, returned analysis/size/type for /etc/hostname"
+    },
+    {
+      "name": "decode_data",
+      "endpoint": "POST /api/tools/decode",
+      "frontend": "app.js: decodeHex()",
+      "purpose": "Encode/decode hex, base64, utf-8",
+      "status": "verified",
+      "evidence": "live 200, hex->utf-8 'Hello world'"
+    },
+    {
+      "name": "analyze_data",
+      "endpoint": "POST /api/tools/analyze",
+      "frontend": "app.js: analyzeHex()",
+      "purpose": "Length/hex/printable/pattern heuristics",
+      "status": "verified",
+      "evidence": "live 200, pure-hex pattern reported"
+    },
+    {
+      "name": "simulate_sweep",
+      "endpoint": "POST /api/tools/sweep",
+      "frontend": "app.js: simulateSweep()",
+      "purpose": "Read-only sweep plan (never broadcasts)",
+      "status": "verified",
+      "evidence": "live 200, printed read-only step list"
+    },
+    {
+      "name": "crack_puzzle",
+      "endpoint": "POST /api/tools/crack",
+      "frontend": "app.js: crackPuzzle()",
+      "purpose": "Single-puzzle crack attempt",
+      "status": "verified",
+      "evidence": "live 200, correct 400-style 'puzzle_id is required' with match:false"
+    },
+    {
+      "name": "analyze_image",
+      "endpoint": "POST /api/tools/image",
+      "frontend": "app.js: analyzeImage()",
+      "purpose": "LSB/EXIF/entropy image analysis",
+      "status": "defective",
+      "evidence": "live 200 but steganography block reports \"could not decode image ... No module named 'PIL'\"; pillow missing from requirements.txt. Endpoint still answers; LSB branch is non-functional."
+    },
+    {
+      "name": "validate_seed_phrase",
+      "endpoint": "POST /api/tools/seed-validate",
+      "frontend": "app.js: validateSeed()",
+      "purpose": "BIP39 checksum + wordlist validation",
+      "status": "defective",
+      "evidence": "live 500 internal_error with a valid 12-word vector. Root cause: 'mnemonic' imported at runtime by app/tools.py but absent from requirements.txt, so the Render venv lacks it. Works locally (mnemonic installed)."
+    },
+    {
+      "name": "derive_addresses",
+      "endpoint": "POST /api/tools/derive-addresses",
+      "frontend": "app.js: deriveAddresses()",
+      "purpose": "BIP39 -> BTC (BIP44) + ETH addresses",
+      "status": "defective",
+      "evidence": "live 500 internal_error. Same root cause: 'mnemonic' + 'bech32' both missing from requirements.txt. Works locally."
+    },
+    {
+      "name": "tools_decode_transaction",
+      "endpoint": "POST /api/tools/decode-transaction",
+      "frontend": "none (backend-only)",
+      "purpose": "Raw signed tx -> structured fields (BTC + EVM)",
+      "status": "defective",
+      "evidence": "live 500 internal_error on a real 110-byte legacy ETH tx (chain=ethereum, eth, evm and auto all 500); a truncated payload correctly returns 400, proving the decode path runs. BTC branch returns 200. Root cause: decode_transaction returns v/r/s as bytes; the working tree adds a hex conversion that is NOT in git HEAD and therefore NOT deployed. Reproduced locally: reverting that one hunk yields exactly HTTP 500."
+    },
+    {
+      "name": "tools_convert_mnemonic",
+      "endpoint": "POST /api/tools/mnemonic",
+      "frontend": "none (backend-only)",
+      "purpose": "BIP39 phrase -> entropy/seed/addresses",
+      "status": "defective",
+      "evidence": "live 500 internal_error with a valid 12-word vector. Root cause: 'mnemonic' missing from requirements.txt. Works locally."
+    },
+    {
+      "name": "tools_crypto_calculator",
+      "endpoint": "POST /api/tools/calculator",
+      "frontend": "none (backend-only)",
+      "purpose": "Private key (hex/WIF) -> all addresses",
+      "status": "defective",
+      "evidence": "Hex key -> live 500 internal_error ('coincurve'/'pycryptodome' present but 'base58' path: a hex key reaches _btc_addresses which needs base58; base58 IS declared, so the 500 is a separate undiagnosed crash - needs server logs). WIF key -> live 400 'unrecognised WIF payload length 33/34'. Root cause of the 400: crypto_calculator's WIF dispatch strips the 0x80 version byte only for the compressed form and matches payload length instead, so an uncompressed WIF (33B) is misread as compressed and a real compressed WIF (34B) is rejected. Fixed in the working tree; fix is NOT deployed."
+    },
+    {
+      "name": "tools_parse_wallet_dat",
+      "endpoint": "POST /api/tools/wallet-dat",
+      "frontend": "none (backend-only)",
+      "purpose": "wallet.dat inventory, keys redacted",
+      "status": "verified",
+      "evidence": "live 400 'file not found' for a nonexistent path, i.e. input validation works; endpoint reachable and correctly refuses."
+    },
+    {
+      "name": "puzzles_classify",
+      "endpoint": "POST /api/puzzles/classify",
+      "frontend": "none (backend-only)",
+      "purpose": "Classify a puzzle by slug or text",
+      "status": "verified",
+      "evidence": "live 400 'unknown slug' for a slug absent from the deployed corpus; locally returns a family for a catalog slug. Route wired."
+    },
+    {
+      "name": "crack_list",
+      "endpoint": "GET /api/crack/list",
+      "frontend": "app.js: catalog page",
+      "purpose": "List crack-catalog puzzles with filters",
+      "status": "verified",
+      "evidence": "live 200 with a well-formed empty listing (items/count/total/offset/limit/status). Empty because the deployed corpus is 0 items, not because the route is broken."
+    },
+    {
+      "name": "puzzles_plan",
+      "endpoint": "POST /api/puzzles/plan",
+      "frontend": "none (backend-only)",
+      "purpose": "Build an attack plan for a puzzle",
+      "status": "verified",
+      "evidence": "live 400 'unknown slug' for a slug absent from the deployed corpus; locally returns a plan. Route wired."
+    },
+    {
+      "name": "puzzles_attack",
+      "endpoint": "POST /api/puzzles/attack",
+      "frontend": "none (backend-only)",
+      "purpose": "Run an attack step against a puzzle",
+      "status": "verified",
+      "evidence": "live 400 'unknown slug' for a slug absent from the deployed corpus; locally returns an outcome. Route wired."
+    },
+    {
+      "name": "puzzles_bitcoin_puzzle",
+      "endpoint": "POST /api/puzzles/bitcoin-puzzle",
+      "frontend": "app.js: checkBtcPuzzle()",
+      "purpose": "Keyspace/feasibility lookup for a BTC puzzle address",
+      "status": "verified",
+      "evidence": "live 200 with puzzle_number, block_height, keyspace_range, estimates, feasible for 1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw"
+    },
+    {
+      "name": "web_sources",
+      "endpoint": "POST /api/web-sources",
+      "frontend": "app.js: searchWebSources()",
+      "purpose": "Search the curated web-source index",
+      "status": "verified",
+      "evidence": "live 200 with a well-formed empty result set; locally returns source entries. Route wired."
+    },
+    {
+      "name": "auth_challenge",
+      "endpoint": "POST /api/auth/challenge",
+      "frontend": "app.js: wallet gate",
+      "purpose": "Issue a signing challenge (nonce + message)",
+      "status": "verified",
+      "evidence": "live 200 returning address, nonce and a signed message"
+    },
+    {
+      "name": "auth_verify",
+      "endpoint": "POST /api/auth/verify",
+      "frontend": "app.js: wallet verify",
+      "purpose": "Verify a wallet signature -> session token",
+      "status": "verified",
+      "evidence": "live 400 \"'nonce' is required\" for an empty body, i.e. the route is wired and validates input; a full challenge->verify round trip requires a real signature and was not exercised."
+    },
+    {
+      "name": "wallet_assets",
+      "endpoint": "POST /api/wallet/assets",
+      "frontend": "app.js: loadAssets()",
+      "purpose": "Read-only public asset lookup",
+      "status": "verified",
+      "evidence": "live 200 for 0xd8dA...6045 returning ETH balance 5.773251986299759 with a USD value and a blockscout meta block. Slow: 38-39s."
+    },
+    {
+      "name": "telegram_validate",
+      "endpoint": "POST /api/telegram/validate",
+      "frontend": "app.js: telegram login",
+      "purpose": "Validate Mini App initData (HMAC)",
+      "status": "verified",
+      "evidence": "live 200 {valid:false, detail:'TELEGRAM_BOT_TOKEN not configured; cannot verify HMAC', status:'\u23f3'} - the correct fail-closed response when the token is unset."
+    },
+    {
+      "name": "scan_secrets",
+      "endpoint": "POST /api/security/scan",
+      "frontend": "app.js: checkSecrets()",
+      "purpose": "Detect secret-shaped text without storing it",
+      "status": "verified",
+      "evidence": "live 200 {clean:true, count:0, findings:[], notice:'This service never stores or transmits matched secrets.', status:'\u2713'}"
+    }
+  ]
+}

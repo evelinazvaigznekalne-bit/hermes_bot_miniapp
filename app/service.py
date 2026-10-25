@@ -19,6 +19,7 @@ from .chains.registry import build_registry
 from .config import Settings, get_settings
 from .errors import AddressValidationError, ConfigError, NonceError, SignatureError
 from .logging_setup import get_logger, setup_logging
+from .errors import _safe_detail
 from .puzzles.analysis import PuzzleAnalyzer
 from .puzzles.memepol import MemePolClient
 from .puzzles.ocp import OcpSource
@@ -248,7 +249,7 @@ class WalletService:
         try:
             report: AssetReport = provider.fetch_assets(address, limit=limit)
         except Exception as exc:
-            self.tracker.fail("assets_chains", f"{type(exc).__name__}: {exc}")
+            self.tracker.fail("assets_chains", _safe_detail(f"{type(exc).__name__}: {exc}"))
             raise
 
         if report.status == "✓":

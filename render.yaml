@@ -1,10 +1,25 @@
 services:
+  # Render Blueprint. Because a Dockerfile is present, Render builds the Docker
+  # image and ignores buildCommand/startCommand — those are kept for the native
+  # Python runtime as a fallback.
+  #
+  # SECRETS ARE NOT LISTED HERE. Set them in the Render Dashboard after the first
+  # deploy (Dashboard → service → Environment):
+  #   TELEGRAM_BOT_TOKEN      from @BotFather
+  #   SESSION_SECRET          openssl rand -hex 32
+  #   MEMEPOL_API_KEY         optional
+  #   TELEGRAM_WEBAPP_URL     https://<service-name>.onrender.com
+  #   OCP_DATASET_PATH        optional — leave unset on Render (no local ocp repo)
   - type: web
     name: hermes-wallet-inspector
     runtime: python
     plan: free
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: python3 -m app.main --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"
+      - key: HOST
+        value: "0.0.0.0"

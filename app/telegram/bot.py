@@ -10,13 +10,15 @@ from __future__ import annotations
 import html
 import os
 import re
+import subprocess
+import sys
 import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..config import Settings, get_settings, is_placeholder
-from ..errors import ConfigError
+from ..errors import ConfigError, _safe_exception
 from ..formatting import (
     ai_suggestion, box, esc, file_analysis_result, goal_prompt,
     opportunity_list, puzzle_verdict, research_workflow_summary,
@@ -36,6 +38,13 @@ from ..webtools import (
     validate_public_https,
     wayback_available,
 )
+
+# self-improvement logger
+try:
+    from ..tool_logger import log_tool_result
+except Exception:
+    def log_tool_result(*a, **k):
+        return 0
 
 log = get_logger()
 
@@ -103,6 +112,7 @@ def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
         "  /classify [puzzle_id|text] — identify the puzzle type (math/brute/…)\n"
         "  /plan &lt;puzzle_id&gt; — the concrete attack its type implies\n"
         "  /families — the strategy types and corpus distribution\n"
+        "  /halv — HALV puzzle research progress\n"
         "  /image — image analysis info\n"
         "  /goal [text] — AI goal helper\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -122,7 +132,15 @@ def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
         "  /txdecode &lt;hex&gt; — decode a raw BTC or ETH transaction\n"
         "  /mnemonic &lt;words&gt; — BIP39 check + seed + addresses\n"
         "  /keycalc &lt;hex|wif&gt; — every address a key controls\n"
-        "  /walletdat &lt;path&gt; — inspect a wallet.dat (keys redacted)\n\n"
+        "  /walletdat &lt;path&gt; — inspect a wallet.dat (keys redacted)\n"
+        "  /script &lt;hex&gt; — decode a Bitcoin script\n"
+        "  /sigverify &lt;pubkey&gt; &lt;msg&gt; &lt;sig&gt; — verify ECDSA signature\n"
+        "  /bip38 &lt;key&gt; &lt;pass&gt; — decrypt a BIP38 encrypted key\n"
+        "  /cluster &lt;txid&gt; — common-input address clustering heuristic\n"
+        "  /honeypot &lt;address&gt; — meme / EVM token safety check\n"
+        "  /price &lt;symbol&gt; — live price from CoinGecko / Binance\n"
+        "  /cipher &lt;text&gt; — multi-decoder: rot13, caesar, xor, base64…\n"
+        "  /prediction — prediction-market overview (Polymarket)\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "👤 <b>Account</b>\n"
         "  /dashboard — your stats and activity\n"
@@ -148,7 +166,7 @@ class TelegramClient:
                  api_base: str = "https://api.telegram.org"):
         self.token = token
         self.api_base = api_base.rstrip("/")
-        self.http = http or HttpClient(timeout=35.0, max_retries=4, backoff=1.0)
+        self.http = http or HttpClient(timeout=45.0, max_retries=5, backoff=2.0)
         if token and not is_placeholder(token):
             register_secret(token)
 
@@ -204,7 +222,8 @@ class TelegramBot:
     def __init__(self, service: Optional[WalletService] = None, *,
                  settings: Optional[Settings] = None,
                  client: Optional[TelegramClient] = None,
-                 users: Optional[UserStore] = None):
+                 users: Optional[UserStore] = None,
+                 selftest: bool = False):
         self.settings = settings or get_settings()
         self.service = service or WalletService(self.settings)
         self.client = client or TelegramClient(self.settings.telegram_bot_token)
@@ -212,21 +231,61 @@ class TelegramBot:
             Path(self.settings.log_dir).parent / ".run" / "users.json")
         self._offset = 0
         self._running = False
+        self.proofofsolve_sessions: Dict[int, Dict[str, Any]] = {}
+        self.selftest = selftest
+        self._selftest_replies: List[str] = []
 
     # -- handlers ---------------------------------------------------------
     def handle_update(self, update: Dict[str, Any]) -> Optional[str]:
         message = update.get("message") or update.get("edited_message") or {}
         chat = message.get("chat") or {}
+        from_user = message.get("from") or {}
         chat_id = chat.get("id")
         text = (message.get("text") or "").strip()
+        sender_id = from_user.get("id")
+        chat_type = (chat.get("type") or "").lower()
         if chat_id is None or not text:
             return None
-        return self.handle_command(chat_id, text)
+        return self.handle_command(chat_id, text, sender_id=sender_id, chat_type=chat_type)
 
-    def handle_command(self, chat_id: int, text: str) -> str:
+    def handle_command(self, chat_id: int, text: str, *,
+                       sender_id: Optional[int] = None,
+                       chat_type: str = "") -> str:
+        # --- ProofOfSolve interactive word entry ---
+        session = self.proofofsolve_sessions.get(chat_id)
+        if session and not text.startswith("/"):
+            return self._proofofsolve_interactive(chat_id, text)
+
         parts = text.split()
         command = parts[0].split("@")[0].lower()
         args = parts[1:]
+
+        # --- Access control for sensitive crypto commands ---
+        # Authorize by the authenticated sender's Telegram from.id, never by
+        # chat_id.  In a group chat_id != from.id, so chat_id-based checks
+        # would authorize the wrong identity or leak group membership.
+        if command in ("/xkeys", "/mnemonic", "/keycalc", "/bip38"):
+            # Deny in groups by default: a group chat_id is not a user id.
+            if chat_type == "group" or chat_type == "supergroup":
+                return ("🔒 <b>Sensitive commands are private only.</b>\n\n"
+                        "Use this command in a direct message with the bot.")
+            # Fail closed when sender identity or allowlist is missing.
+            if sender_id is None:
+                log.warning("sensitive command without sender identity",
+                            extra={"component": "telegram.auth",
+                                   "status": "✗", "chat_id": chat_id,
+                                   "command": command})
+                return "🔒 <b>Access denied.</b>"
+            allowed = self.settings.telegram_authorized_user_ids
+            if not allowed:
+                return ("🔒 <b>Authorized users only.</b>\n\n"
+                        "Set TELEGRAM_AUTHORIZED_USER_IDS in your environment "
+                        "to a comma-separated list of Telegram user IDs.")
+            try:
+                if int(sender_id) not in allowed:
+                    return "🔒 <b>Access denied.</b> You are not authorized for this command."
+            except (TypeError, ValueError):
+                return "🔒 <b>Access denied.</b>"
 
         # Remember the user on first contact (and refresh last-seen).
         try:
@@ -337,8 +396,44 @@ class TelegramBot:
             reply = self._wallet_text(chat_id)
         elif command == "/bitcoinpuzzle":
             reply = self._bitcoinpuzzle_text(args)
+        elif command == "/proofofsolve":
+            reply = self._proofofsolve_text(chat_id, args)
+        elif command == "/cancel":
+            if chat_id in self.proofofsolve_sessions:
+                del self.proofofsolve_sessions[chat_id]
+                reply = "✓ ProofOfSolve session cancelled."
+            else:
+                reply = "No active ProofOfSolve session to cancel."
+        elif command == "/halv":
+            reply = self._halv_text(args)
+        elif command == "/honeypot":
+            reply = self._honeypot_text(args)
+        elif command == "/script":
+            reply = self._script_text(args)
+        elif command == "/sigverify":
+            reply = self._sigverify_text(args)
+        elif command == "/bip38":
+            reply = self._bip38_text(args)
+        elif command == "/cluster":
+            reply = self._cluster_text(args)
+        elif command == "/price":
+            reply = self._price_text(args)
+        elif command == "/cipher":
+            reply = self._cipher_text(args)
+        elif command == "/prediction":
+            reply = self._prediction_text(args)
         elif command == "/websources":
             reply = self._websources_text(args)
+        elif command == "/tools":
+            reply = self._tools_text()
+        elif command == "/toolstats":
+            reply = self._toolstats_text(args)
+        elif command == "/balance":
+            reply = self._balance_text(args)
+        elif command == "/addrinfo":
+            reply = self._addrinfo_text(args)
+        elif command == "/xkeys":
+            reply = self._xkeys_text(args)
         elif command == "/monitor":
             reply = self._monitor_text(args)
         else:
@@ -419,7 +514,7 @@ class TelegramBot:
                 lines.append("\n<i>No hints available for this tier.</i>")
             return "\n".join(lines)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     # -- puzzle strategy identification -----------------------------------
 
@@ -475,7 +570,7 @@ class TelegramBot:
             lines.append(f"  {html.escape(out['approach'][0])}")
             return "\n".join(lines)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     def _plan_text(self, args) -> str:
         """Show the concrete attack plan a puzzle's family implies."""
@@ -507,7 +602,7 @@ class TelegramBot:
                     ", ".join(plan.secondary_families[:3])))
             return "\n".join(lines)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     def _families_text(self) -> str:
         """List the strategy families and the corpus distribution."""
@@ -547,9 +642,9 @@ class TelegramBot:
         try:
             d = decode_transaction(raw, chain=chain)
         except DecodeError as exc:
-            return f"✗ {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         lines = [f"🧾 <b>Transaction</b> — {html.escape(str(d.get('chain')))}",
                  f"Decoded as: <code>{html.escape(str(d.get('decoded_as')))}</code>",
@@ -611,9 +706,9 @@ class TelegramBot:
         try:
             d = convert_mnemonic(phrase, to="all")
         except DecodeError as exc:
-            return f"✗ {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         words = len(phrase.split())
         if not d.get("valid"):
@@ -645,17 +740,18 @@ class TelegramBot:
         try:
             d = crypto_calculator(key)
         except DecodeError as exc:
-            return f"✗ {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         lines = ["🔑 <b>Key calculator</b>",
                  f"Source: {html.escape(str(d.get('source')))}",
-                 f"Key: <code>{html.escape(str(d.get('key_hex_prefix')))}</code> "
-                 f"<i>(redacted)</i>",
                  f"In range: {'yes' if d.get('in_range') else 'NO'}",
-                 "",
-                 "<b>Bitcoin:</b>"]
+                 ""]
+        if d.get("note"):
+            lines.append(f"<i>{html.escape(d['note'])}</i>")
+            lines.append("")
+        lines.append("<b>Bitcoin:</b>")
         for name, addr in (d.get("chains", {}).get("bitcoin") or {}).items():
             lines.append(f"  • {html.escape(name)}: <code>{html.escape(str(addr))}</code>")
         eth = (d.get("chains", {}).get("ethereum") or {}).get("address")
@@ -679,9 +775,9 @@ class TelegramBot:
         try:
             d = parse_wallet_dat(p.read_bytes())
         except DecodeError as exc:
-            return f"✗ {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         lines = [f"🗄️ <b>wallet.dat</b> — {html.escape(p.name)}",
                  f"Format: {html.escape(str(d.get('format')))}",
@@ -997,6 +1093,371 @@ class TelegramBot:
             lines.append("<i>NOT feasible with current technology.</i>")
         return "\n".join(lines)
 
+    def _proofofsolve_text(self, chat_id: int, args) -> str:
+        """ProofOfSolve puzzle helper."""
+
+        if not args:
+            return (
+                "🧩 <b>ProofOfSolve</b>\n\n"
+                "Free-entry puzzles: Meridian and Alcatraz.\n\n"
+                "Usage:\n"
+                "  <code>/proofofsolve meridian clues</code> — fetch Meridian clues\n"
+                "  <code>/proofofsolve alcatraz clues</code> — fetch Alcatraz clues\n"
+                "  <code>/proofofsolve meridian verify <i>word1 word2 ... word12</i></code>\n"
+                "  <code>/proofofsolve meridian wait</code> — wait for puzzle to open\n"
+                "  <code>/proofofsolve meridian</code> — interactive word entry\n\n"
+                "Mechanism: 12 Street View clues → 12 BIP39 words → BIP84 address.\n"
+                "Run locally: <code>python3 ~/proofofsolve.py meridian --clues</code>"
+            )
+
+        puzzle = args[0].lower()
+        if puzzle not in ("meridian", "alcatraz"):
+            return "✗ unknown puzzle. Use <code>meridian</code> or <code>alcatraz</code>."
+
+        action = args[1].lower() if len(args) > 1 else None
+
+        if action is None:
+            # Start interactive word entry
+            self.proofofsolve_sessions[chat_id] = {
+                "puzzle": puzzle,
+                "words": [],
+            }
+            return (
+                f"🧩 <b>{puzzle.capitalize()} — interactive mode</b>\n\n"
+                f"Send the 12 BIP39 words one at a time.\n\n"
+                f"<b>Word 1/12:</b>"
+            )
+
+        if action == "clues":
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(Path.home() / "proofofsolve.py"),
+                     puzzle, "--clues"],
+                    capture_output=True, text=True, timeout=30
+                )
+                out = result.stdout.strip() or result.stderr.strip()
+                return f"🧩 <b>{puzzle.capitalize()} clues</b>\n\n{html.escape(out)}"
+            except Exception as exc:
+                return f"✗ {html.escape(self._safe_exception(exc))}"
+
+        if action == "verify":
+            if len(args) != 14:
+                return (
+                    "⚠️ Provide exactly 12 BIP39 words.\n\n"
+                    f"Usage: <code>/proofofsolve {puzzle} verify word1 ... word12</code>"
+                )
+            words = " ".join(args[2:14])
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(Path.home() / "proofofsolve.py"),
+                     puzzle, "-w", words],
+                    capture_output=True, text=True, timeout=30
+                )
+                out = result.stdout.strip() or result.stderr.strip()
+                return f"🔐 <b>{puzzle.capitalize()} verification</b>\n\n{html.escape(out)}"
+            except Exception as exc:
+                return f"✗ {html.escape(self._safe_exception(exc))}"
+
+        if action == "wait":
+            return (
+                f"⏳ Monitoring <b>{puzzle}</b>...\n\n"
+                f"Run locally to block: <code>python3 ~/proofofsolve.py {puzzle} --wait</code>\n\n"
+                f"The script polls every 60s and auto-fetches clues when the puzzle opens."
+            )
+
+        return (
+            f"Usage: <code>/proofofsolve {puzzle} clues|verify|wait</code>\n\n"
+            f"<code>clues</code> — fetch published clues\n"
+            f"<code>verify</code> — check a 12-word phrase against the fingerprint\n"
+            f"<code>wait</code> — wait for puzzle to open (run locally)"
+        )
+
+    def _proofofsolve_interactive(self, chat_id: int, text: str) -> str:
+        """Handle interactive word-by-word entry for ProofOfSolve."""
+        session = self.proofofsolve_sessions.get(chat_id)
+        if not session:
+            return "✗ No active ProofOfSolve session. Use /proofofsolve meridian to start."
+
+        word = text.strip().lower()
+        if not word:
+            return "⚠️ Please send a single BIP39 word."
+
+        session["words"].append(word)
+        idx = len(session["words"])
+
+        if idx >= 12:
+            # Done collecting — run verification
+            words_str = " ".join(session["words"][:12])
+            puzzle = session["puzzle"]
+            try:
+                result = subprocess.run(
+                    [sys.executable, str(Path.home() / "proofofsolve.py"),
+                     puzzle, "-w", words_str],
+                    capture_output=True, text=True, timeout=30
+                )
+                out = result.stdout.strip() or result.stderr.strip()
+            except Exception as exc:
+                out = self._safe_exception(exc)
+            # Clear session
+            del self.proofofsolve_sessions[chat_id]
+            return (
+                f"🔐 <b>{puzzle.capitalize()} verification</b> (12 words entered)\n\n"
+                f"{html.escape(out)}"
+            )
+
+        # Prompt for next word
+        return (
+            f"🧩 <b>{session['puzzle'].capitalize()} — word {idx}/12</b>\n\n"
+            f"<code>{html.escape(word)}</code> ✓\n\n"
+            f"Send word {idx + 1}/12:"
+        )
+
+    def _halv_text(self, args) -> str:
+        """HALV puzzle research progress."""
+        try:
+            from ..halv import (
+                get_halv_summary,
+                get_halv_negatives,
+                get_halv_leads,
+                get_halv_next_steps,
+            )
+            summary = get_halv_summary()
+            lines = [
+                f"🧩 <b>HALV — {html.escape(summary.get('title', 'Zden Level HALV'))}</b>",
+                f"Status: <b>{html.escape(summary.get('status', 'OPEN'))}</b>",
+                f"Prize: {summary.get('prize_sats', 0):,} sats",
+                f"Author: {html.escape(summary.get('author', ''))}",
+                "",
+            ]
+
+            # Escrow with verification context
+            if summary.get("escrow"):
+                lines.append(f"Escrow: <code>{html.escape(summary['escrow'])}</code>")
+                if summary.get("verified_state"):
+                    lines.append(
+                        f"On-chain: {html.escape(summary['verified_state'])} "
+                        f"(checked {html.escape(str(summary.get('verified_on', '')))})"
+                    )
+                else:
+                    lines.append("On-chain: not yet verified in this session")
+                lines.append("")
+
+            # Verified findings
+            lines.append("<b>Verified findings</b>")
+            lines.append("• Image is a single continuous trace, symmetric about y=475")
+            lines.append("• Damped oscillation, amplitude decays x=92..857")
+            lines.append(f"• SHA-256: <code>{html.escape('3a487ebaeb4801137f09159a2d533046936cd395f4e2f7d115ac554607790e95')}</code>")
+            lines.append(f"• Oracle certified: {summary.get('oracle_certified', False)}")
+            lines.append(f"• Information bound: ≤59 bits from shape channel (&lt; 256 bits needed)")
+            lines.append("")
+
+            # Negative results
+            negatives = get_halv_negatives()
+            if negatives:
+                lines.append(f"<b>Negative results ({len(negatives)} families)</b>")
+                for n in negatives:
+                    vol = html.escape(str(n.get("volume", "")))
+                    res = html.escape(str(n.get("result", "")))
+                    hyp = html.escape(str(n.get("hypothesis", "")))
+                    # Truncate long hypotheses at word boundary
+                    if len(hyp) > 55:
+                        hyp = hyp[:52].rsplit(" ", 1)[0] + "…"
+                    lines.append(f"• {hyp}: {vol}, {res}")
+                lines.append("")
+
+            # Unverified / withdrawn
+            lines.append("<b>Withdrawn / unverified claims</b>")
+            lines.append("• 59-lobe reading (lobe count not stable across smoothing scales)")
+            lines.append("• 118-bit capacity measurement (rested on withdrawn lobe count)")
+            lines.append("• 6.3M-window sweep (cited harness not found on filesystem)")
+            lines.append("")
+
+            # Leads
+            leads = get_halv_leads()
+            if leads:
+                lines.append("<b>Open leads</b>")
+                for i, lead in enumerate(leads, 1):
+                    lines.append(f"{i}. {html.escape(lead)}")
+                lines.append("")
+
+            # Next steps
+            steps = get_halv_next_steps()
+            if steps:
+                lines.append("<b>Recommended next steps</b>")
+                for step in steps[:5]:
+                    lines.append(f"• {html.escape(step)}")
+
+            lines.append("")
+            lines.append("⚠ No private key has been found. This is a research summary only.")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _honeypot_text(self, args) -> str:
+        """Meme / EVM token safety check via honeypot.is + GoPlus."""
+        if not args:
+            return ("Usage: <code>/honeypot &lt;address&gt;</code>\n"
+                    "Example: <code>/honeypot 0x1234...abcd</code>")
+        try:
+            from ..meme_token import MemeTokenAnalyzer
+            report = MemeTokenAnalyzer().analyze(args[0].strip())
+            data = report.as_dict()
+            lines = [
+                f"🛡️ <b>Token Safety: {html.escape(data['address'][:10])}…</b>",
+                f"Chain: {html.escape(data['chain'])}",
+                f"Risk: <b>{html.escape(data['risk_level'])}</b> (score {data['risk_score']})",
+                "",
+                "<b>Checks</b>",
+            ]
+            for c in data["checks"]:
+                sym = "✓" if c["passed"] else "✗"
+                lines.append(f"{sym} {html.escape(c['name'])}: {html.escape(c['detail'])}")
+            if data.get("liquidity_usd"):
+                lines.append(f"\nLiquidity: ${data['liquidity_usd']:,.2f}")
+            if data.get("price_usd"):
+                lines.append(f"Price: ${data['price_usd']:.6f}")
+            if data["warnings"]:
+                lines += ["", "<b>Warnings</b>"] + [
+                    f"⚠ {html.escape(w)}" for w in data["warnings"]
+                ]
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _script_text(self, args) -> str:
+        """Decode a Bitcoin script hex string."""
+        if not args:
+            return "Usage: <code>/script &lt;hex&gt;</code>\nExample: <code>/script 76a91489abcdefabbaabbaabbaabbaabbaabbaabbaab88ac</code>"
+        try:
+            from ..crypto_extras import decode_bitcoin_script
+            data = decode_bitcoin_script(" ".join(args))
+            lines = [
+                f"📜 <b>Bitcoin Script</b>",
+                f"Type: <b>{html.escape(data['type'])}</b>",
+                "",
+                "<b>Opcodes</b>",
+            ]
+            for op in data["ops"][:30]:
+                lines.append(f"• {html.escape(op)}")
+            if len(data["ops"]) > 30:
+                lines.append(f"… (+{len(data['ops']) - 30} more)")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _sigverify_text(self, args) -> str:
+        """Verify an ECDSA signature."""
+        if len(args) < 3:
+            return "Usage: <code>/sigverify &lt;pubkey&gt; &lt;msg_hex&gt; &lt;sig_hex&gt;</code>\nUse <code>keccak</code> as 4th arg for Ethereum-style messages."
+        try:
+            from ..crypto_extras import verify_ecdsa_signature
+            hasher = args[3].strip() if len(args) > 3 else "sha256"
+            result = verify_ecdsa_signature(args[0], args[1], args[2], hasher=hasher)
+            return f"🔐 <b>ECDSA Verify</b>\nValid: <b>{result['valid']}</b>"
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _bip38_text(self, args) -> str:
+        """Decrypt a BIP38 encrypted key."""
+        if len(args) < 2:
+            return "Usage: <code>/bip38 &lt;encrypted_key&gt; &lt;passphrase&gt;</code>"
+        try:
+            from ..crypto_extras import decrypt_bip38
+            result = decrypt_bip38(args[0], " ".join(args[1:]))
+            return (
+                f"🔓 <b>BIP38 Decrypted</b>\n"
+                f"Compressed: {result.get('compressed')}\n"
+                f"Address: <code>{html.escape(str(result.get('address', '')))}</code>"
+            )
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _cluster_text(self, args) -> str:
+        """Common-input address clustering heuristic."""
+        if not args:
+            return "Usage: <code>/cluster &lt;txid&gt;</code>"
+        try:
+            from ..crypto_extras import cluster_addresses_heuristic
+            result = cluster_addresses_heuristic(args[:5])
+            clusters = result.get("clusters", [])
+            lines = [
+                f"🔗 <b>Address Clusters</b>",
+                f"Inputs: {len(args[:5])} txids",
+                f"Clusters: {len(clusters)}",
+                "",
+            ]
+            for i, cl in enumerate(clusters[:8]):
+                lines.append(f"Cluster {i+1}: {len(cl)} addresses")
+                for a in cl[:5]:
+                    lines.append(f"  • <code>{html.escape(a)}</code>")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _price_text(self, args) -> str:
+        """Live price via CoinGecko / Binance."""
+        if not args:
+            return "Usage: <code>/price &lt;symbol&gt;</code>\nExample: <code>/price btc</code>"
+        try:
+            from ..market_data import MarketData
+            data = MarketData().price(args[0].strip())
+            if "error" in data:
+                return f"✗ {html.escape(data['error'])}: {html.escape(data['symbol'])}"
+            lines = [f"💰 <b>Price: {html.escape(data['symbol'].upper())}</b>", f"Source: {html.escape(data['source'])}"]
+            if "price" in data:
+                lines.append(f"Price: ${data['price']:,.4f}")
+            if "usd" in data:
+                lines.append(f"Price: ${data['usd']:,.2f}")
+            if "change_pct" in data:
+                lines.append(f"24h change: {data['change_pct']:+.2f}%")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _cipher_text(self, args) -> str:
+        """Multi-decoder for puzzle ciphers."""
+        if not args:
+            return "Usage: <code>/cipher &lt;text&gt;</code>\nExample: <code>/cipher SGVsbG8gV29ybGQ=</code>"
+        try:
+            from ..cipher_tools import multi_decode
+            data = multi_decode(" ".join(args))
+            lines = [f"🔓 <b>Cipher Decode</b>", f"Input: {html.escape(data['input'][:60])}", ""]
+            if not data["results"]:
+                lines.append("No decoders produced readable output.")
+            for r in data["results"][:10]:
+                sym = "★" if r["score"] > 0.6 else " "
+                lines.append(f"{sym} {html.escape(r['decoder'])} (score {r['score']})")
+                lines.append(f"  {html.escape(r['output'][:120])}")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
+    def _prediction_text(self, args) -> str:
+        """Prediction-market overview."""
+        try:
+            from ..market_data import MarketData
+            data = MarketData().overview()
+            lines = ["📈 <b>Prediction Markets</b>"]
+            pm = data.get("polymarket")
+            if not pm:
+                lines.append("No prediction-market data available right now.")
+                return "\n".join(lines)
+            lines.append("\n<b>Polymarket — top by 24h volume</b>")
+            for m in pm.get("top_markets", [])[:5]:
+                q = html.escape(str(m.get("question", "")))
+                vol = m.get("volume_24h", 0)
+                bb = m.get("best_bid")
+                ba = m.get("best_ask")
+                lines.append(f"• {q[:60]}")
+                lines.append(f"  Vol: ${vol:,.0f}")
+                if bb is not None and ba is not None:
+                    lines.append(f"  Bid/Ask: {bb} / {ba}")
+            lines.append("")
+            lines.append("⚠ This is public market data only, not financial advice.")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
     def _websources_text(self, args) -> str:
         """Show web research tool sources."""
         from ..web_research import get_all_sources, search_tools
@@ -1031,31 +1492,253 @@ class TelegramBot:
         lines.append("Usage: <code>/websources &lt;query&gt;</code> to search tools")
         return "\n".join(lines)
 
+    def _balance_text(self, args) -> str:
+        """Check real address balance via mempool.space / Blockscout."""
+        if not args:
+            return "Usage: <code>/balance &lt;address&gt;</code>"
+        addr = args[0].strip()
+        try:
+            start = time.time()
+            from ..crypto_extras import address_balance
+            data = address_balance(addr)
+            duration_ms = int((time.time() - start) * 1000)
+            log_tool_result(
+                tool="address_balance",
+                input_summary=addr,
+                output_summary="success; output redacted",
+                success=True,
+                duration_ms=duration_ms,
+            )
+            return (
+                f"💰 <b>Balance: {html.escape(addr[:12])}…</b>\n"
+                f"Chain: {html.escape(data.get('source', '?'))}\n"
+                f"Balance: <b>{data.get('balance', 0):.8f}</b>\n"
+                f"Confirmed: {data.get('confirmed', 0):.8f}\n"
+                f"Unconfirmed: {data.get('unconfirmed', 0):.8f}\n"
+                f"Tx count: {data.get('tx_count', 0)}"
+            )
+        except Exception as exc:
+            log_tool_result(
+                tool="address_balance",
+                input_summary=addr,
+                output_summary="failed",
+                success=False,
+                error=exc,
+            )
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(self._safe_exception(exc))}"
+
+    def _addrinfo_text(self, args) -> str:
+        """Full address info: UTXO count, recent txids."""
+        if not args:
+            return "Usage: <code>/addrinfo &lt;address&gt;</code>"
+        addr = args[0].strip()
+        try:
+            start = time.time()
+            from ..crypto_extras import address_info
+            data = address_info(addr)
+            duration_ms = int((time.time() - start) * 1000)
+            log_tool_result(
+                tool="address_info",
+                input_summary=addr,
+                output_summary="success; output redacted",
+                success=True,
+                duration_ms=duration_ms,
+            )
+            lines = [
+                f"🔎 <b>Address: {html.escape(addr[:12])}…</b>",
+                f"Source: {html.escape(data.get('source', '?'))}",
+                f"Balance: <b>{data.get('balance', 0):.8f}</b>",
+                f"UTXOs: {data.get('utxo_count', 0)}",
+                f"Tx count: {data.get('tx_count', 0)}",
+                "",
+                "<b>Recent txs</b>",
+            ]
+            for tx in data.get("recent_txs", [])[:5]:
+                lines.append(f"• <code>{html.escape(tx.get('txid', ''))[:16]}…</code> "
+                             f"{tx.get('value', 0):.6f} {'✓' if tx.get('confirmed') else '⏳'}")
+            return "\n".join(lines)
+        except Exception as exc:
+            log_tool_result(
+                tool="address_info",
+                input_summary=addr,
+                output_summary="failed",
+                success=False,
+                error=exc,
+            )
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(self._safe_exception(exc))}"
+
+    def _xkeys_text(self, args) -> str:
+        """Derive BIP32/44/49/84 xpubs + first addresses from a BIP39 phrase."""
+        if not args:
+            return "Usage: <code>/xkeys &lt;bip39 phrase&gt; [passphrase]</code>"
+        phrase = " ".join(args[:12]) if len(args) >= 12 else args[0]
+        passphrase = args[12] if len(args) > 12 else ""
+        try:
+            start = time.time()
+            from ..crypto_extras import mnemonic_to_xkeys
+            data = mnemonic_to_xkeys(phrase, passphrase=passphrase)
+            duration_ms = int((time.time() - start) * 1000)
+            log_tool_result(
+                tool="mnemonic_to_xkeys",
+                input_summary="<redacted>",
+                output_summary="success; sensitive output redacted",
+                success=True,
+                duration_ms=duration_ms,
+            )
+            lines = [f"🔑 <b>BIP39 -> xpubs</b>", f"Valid: {data.get('valid')}", ""]
+            for label, info in data.get("paths", {}).items():
+                lines.append(f"<b>{html.escape(label)}</b>")
+                if "error" in info:
+                    lines.append(f"  ✗ {html.escape(info['error'])}")
+                else:
+                    lines.append(f"  xpub: <code>{html.escape(info.get('xpub', ''))[:20]}…</code>")
+                    lines.append(f"  P2PKH: <code>{html.escape(info.get('first_p2pkh', ''))}</code>")
+                    lines.append(f"  SegWit: <code>{html.escape(info.get('first_segwit', ''))}</code>")
+                lines.append("")
+            return "\n".join(lines)
+        except Exception as exc:
+            log_tool_result(
+                tool="mnemonic_to_xkeys",
+                input_summary="<redacted>",
+                output_summary="failed",
+                success=False,
+                error=exc,
+            )
+            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(self._safe_exception(exc))}"
+
+    def _tools_text(self) -> str:
+        """List all available tools with categories."""
+        tools = [
+            ("🔍 Address tools", [
+                "/inspect — public assets for an address",
+                "/scan — deep scan or token scam check",
+                "/balance — real-time balance (no key)",
+                "/addrinfo — UTXO count + recent txids",
+                "/cluster — common-input address clustering",
+            ]),
+            ("🧩 Puzzle tools", [
+                "/puzzles — compare with puzzle corpus",
+                "/catalog — browse puzzle catalog",
+                "/crack — crack attempt info",
+                "/classify — puzzle type identification",
+                "/plan — attack plan",
+                "/families — strategy families",
+                "/bitcoinpuzzle — BTC puzzle tracker",
+                "/proofofsolve — ProofOfSolve helper",
+                "/halv — HALV research progress",
+            ]),
+            ("🔐 Crypto tools", [
+                "/txdecode — decode raw transaction hex",
+                "/script — decode Bitcoin script",
+                "/sigverify — ECDSA signature verification",
+                "/bip38 — decrypt BIP38 encrypted key",
+                "/mnemonic — validate BIP39 phrase",
+                "/keycalc — private key -> addresses",
+                "/xkeys — full BIP32/44/49/84 derivation tree",
+                "/walletdat — parse wallet.dat",
+            ]),
+            ("📈 Market / trade", [
+                "/price — live crypto price",
+                "/market — market overview",
+                "/prediction — prediction-market overview",
+                "/honeypot — token safety check",
+            ]),
+            ("🛠️ Utilities", [
+                "/cipher — multi-decoder (rot13, caesar, xor…)",
+                "/image — image analysis info",
+                "/archive — Wayback Machine lookup",
+                "/ig — Instagram post inspection",
+                "/websources — search web research tools",
+                "/toolstats — self-improvement stats",
+                "/status — subsystem status",
+                "/dashboard — your stats",
+            ]),
+        ]
+        lines = ["🛠️ <b>Available Tools</b>", ""]
+        for section, items in tools:
+            lines.append(f"<b>{section}</b>")
+            lines.extend(f"  {item}" for item in items)
+            lines.append("")
+        lines.append("Run <code>/toolstats</code> to see usage stats.")
+        return "\n".join(lines)
+
+    def _toolstats_text(self, args) -> str:
+        """Show tool usage stats for self-improvement."""
+        try:
+            from ..tool_logger import tool_stats, recent_tool_logs
+            stats = tool_stats()
+            by_tool = stats.get("by_tool", {})
+            total = stats.get("total_calls", 0)
+            lines = ["📊 <b>Tool Usage Stats</b>", f"Total calls: {total}", ""]
+            if not by_tool:
+                lines.append("No tool calls recorded yet.")
+                return "\n".join(lines)
+            lines.append("<b>By tool</b>")
+            for tool, s in sorted(by_tool.items(), key=lambda kv: -kv[1]["calls"])[:20]:
+                fail = f"{s['failure_rate']*100:.0f}% fail" if s.get("failure_rate") else ""
+                avg = f"{s['avg_duration_ms']:.0f}ms avg" if s.get("avg_duration_ms") else ""
+                meta = ", ".join(filter(None, [fail, avg]))
+                lines.append(f"• {html.escape(tool)}: {s['calls']} calls ({meta})")
+            lines.append("")
+            recent = recent_tool_logs(limit=10)
+            if recent:
+                lines.append("<b>Recent</b>")
+                for row in recent[:10]:
+                    ts = row.get("ts", "")[:16].replace("T", " ")
+                    ok = "✓" if row.get("success") else "✗"
+                    lines.append(f"• {ts} {ok} {html.escape(row.get('tool', ''))[:20]}")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
+
     def _monitor_text(self, args) -> str:
         """Puzzle monitoring status."""
-        lines = [
-            "📡 <b>Puzzle Monitoring</b>",
-            "",
-            "Active monitoring: <b>offline</b>",
-            "",
-            "The monitoring system tracks puzzle transactions and alerts when:",
-            "  • A puzzle address receives funds",
-            "  • A puzzle is solved (key found)",
-            "  • New puzzle transactions appear",
-            "",
-            "To enable monitoring, run:",
-            "  <code>python3 -m app.monitor</code>",
-            "",
-            "This will check puzzle statuses every 15 minutes and log to <code>logs/monitor.log</code>.",
-        ]
-        return "\n".join(lines)
+        try:
+            from app.monitor import Monitor
+            mon = Monitor()
+            status = mon.status()
+            watching = status.get("watching", 0)
+            events = status.get("events_logged", 0)
+            log_path = status.get("log_path", "logs/monitor.log")
+            interval = status.get("interval_sec", 900)
+            daemon = status.get("daemon_status", "unknown")
+            last_check = status.get("last_check")
+            puzzles = status.get("puzzles", [])
+            lines = [
+                "📡 <b>Puzzle Monitoring</b>",
+                "",
+                f"Daemon: <b>{html.escape(str(daemon))}</b>",
+                f"Watching: <b>{watching}</b> puzzle addresses",
+                f"Interval: <b>{interval}s</b>",
+                f"Events logged: <b>{events}</b>",
+                f"Log: <code>{html.escape(log_path)}</code>",
+            ]
+            if last_check:
+                lines.append(f"Last check: <b>{html.escape(str(last_check))}</b>")
+            lines.append("")
+            if puzzles:
+                lines.append("<b>Watched puzzles</b>")
+                for p in puzzles[:10]:
+                    lines.append(
+                        f"• Puzzle {p['puzzle_number']}: "
+                        f"<code>{html.escape(p['address'][:16])}…</code> "
+                        f"({p['amount_btc']} BTC)"
+                    )
+            lines.append("")
+            if daemon == "running":
+                lines.append("Run: <code>python3 -m app.monitor</code>")
+            else:
+                lines.append("Start: <code>python3 -m app.monitor</code>")
+            return "\n".join(lines)
+        except Exception as exc:
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     def _scan_text(self, address: str) -> str:
         """Deep scan: assets + puzzle analysis + history summary."""
         try:
             result = self.service.inspect_public(address, include_puzzles=True)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         wallet = result["wallet"]
         assets = [a for a in wallet.get("assets", []) if a.get("kind") != "native"]
@@ -1276,7 +1959,7 @@ class TelegramBot:
 
             return "\n".join(lines)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     def _dashboard_text(self, chat_id: int) -> str:
         """User dashboard with stats and activity."""
@@ -1343,7 +2026,7 @@ class TelegramBot:
             lines.append(f"\nOpen the Mini App for the full catalog.")
             return "\n".join(lines)
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
     def _inspect_text(self, address: str, *, with_puzzles: bool) -> str:
         try:
@@ -1351,7 +2034,7 @@ class TelegramBot:
                 address, include_puzzles=with_puzzles
             )
         except Exception as exc:
-            return f"✗ {html.escape(type(exc).__name__)}: {html.escape(str(exc))}"
+            return f"✗ {html.escape(self._safe_exception(exc))}"
 
         wallet = result["wallet"]
         status = wallet["status"]
@@ -1405,6 +2088,9 @@ class TelegramBot:
                 "\n\n<b>Credentials</b>\n" + "\n".join(creds))
 
     def _reply(self, chat_id: int, text: str) -> None:
+        if self.selftest:
+            self._selftest_replies.append(text)
+            return
         if not self.client.configured:
             log.info("bot reply (no token configured)",
                      extra={"component": "telegram.bot", "status": "✗",
@@ -1415,7 +2101,7 @@ class TelegramBot:
         except Exception as exc:
             log.warning("failed to send telegram reply",
                         extra={"component": "telegram.bot", "status": "✗",
-                               "detail": f"{type(exc).__name__}: {exc}"})
+                               "detail": _safe_exception(exc)})
 
     # -- polling ----------------------------------------------------------
     def get_updates(self, timeout: int = 25) -> list:
@@ -1441,6 +2127,22 @@ class TelegramBot:
             {"command": "chains",    "description": "Supported chains"},
             {"command": "progress",  "description": "Your tracked puzzle progress"},
             {"command": "crack",     "description": "Show crack attempt for a puzzle"},
+            {"command": "proofofsolve", "description": "ProofOfSolve puzzle helper"},
+            {"command": "cancel",      "description": "Cancel interactive session"},
+            {"command": "halv",         "description": "HALV puzzle research progress"},
+            {"command": "honeypot",  "description": "Meme / EVM token safety check"},
+            {"command": "script",    "description": "Decode a Bitcoin script"},
+            {"command": "sigverify", "description": "Verify ECDSA signature"},
+            {"command": "bip38",     "description": "Decrypt BIP38 encrypted key"},
+            {"command": "cluster",   "description": "Address clustering heuristic"},
+            {"command": "price",     "description": "Live crypto price"},
+            {"command": "cipher",    "description": "Multi-decoder: rot13, caesar, xor…"},
+            {"command": "prediction","description": "Prediction-market overview"},
+            {"command": "balance",   "description": "Real-time address balance"},
+            {"command": "addrinfo",  "description": "UTXO count + recent txids"},
+            {"command": "xkeys",     "description": "BIP32/44/49/84 derivation tree"},
+            {"command": "tools",     "description": "List all available tools"},
+            {"command": "toolstats", "description": "Tool usage stats"},
             {"command": "image",     "description": "Image analysis info"},
             {"command": "archive",   "description": "Look up an archived webpage"},
             {"command": "ig",        "description": "Inspect an Instagram post URL"},
@@ -1459,7 +2161,7 @@ class TelegramBot:
             return bool(result is True
                         or (isinstance(result, dict) and result.get("ok")))
         except Exception as exc:
-            log.warning("setMyCommands failed: %s", exc,
+            log.warning("setMyCommands failed: %s", _safe_exception(exc),
                         extra={"component": "telegram.bot", "status": "✗"})
             return False
 
@@ -1483,7 +2185,7 @@ class TelegramBot:
             except Exception as exc:
                 log.warning("getUpdates failed",
                             extra={"component": "telegram.bot", "status": "✗",
-                                   "detail": f"{type(exc).__name__}: {exc}"})
+                                   "detail": _safe_exception(exc)})
                 time.sleep(5)
                 continue
             for update in updates:
@@ -1493,7 +2195,7 @@ class TelegramBot:
                 except Exception as exc:  # keep the loop alive
                     log.warning("update handling failed",
                                 extra={"component": "telegram.bot", "status": "✗",
-                                       "detail": f"{type(exc).__name__}: {exc}"})
+                                       "detail": _safe_exception(exc)})
             iterations += 1
             if max_iterations is not None and iterations >= max_iterations:
                 break

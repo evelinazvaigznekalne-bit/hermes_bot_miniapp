@@ -26,6 +26,46 @@ from app.telegram.bot import TelegramBot  # noqa: E402
 
 log = get_logger()
 
+BOT_PID_FILE = Path(__file__).resolve().parent.parent / ".run" / "bot.pid"
+
+
+def _acquire_bot_lock() -> None:
+    """Fail if another bot_main instance is already polling this token."""
+    BOT_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if BOT_PID_FILE.exists():
+        try:
+            existing_pid = int(BOT_PID_FILE.read_text().strip())
+        except ValueError:
+            existing_pid = None
+        if existing_pid is not None and existing_pid != os.getpid() and _pid_alive(existing_pid):
+            raise ConfigError(
+                f"Another bot instance is already running (pid {existing_pid}). "
+                f"Stop it before starting a new one."
+            )
+    BOT_PID_FILE.write_text(str(os.getpid()))
+
+
+def _release_bot_lock() -> None:
+    try:
+        if BOT_PID_FILE.exists():
+            current = BOT_PID_FILE.read_text().strip()
+            if current == str(os.getpid()):
+                BOT_PID_FILE.unlink()
+    except Exception:
+        pass
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hermes Wallet Inspector bot")
@@ -69,6 +109,7 @@ def main(argv=None) -> int:
     bot = TelegramBot(service, settings=settings)
 
     if args.selftest:
+        bot = TelegramBot(service, settings=settings, selftest=True)
         print(bot.handle_command(0, "/start"))
         print()
         print(bot.handle_command(0, "/status"))
@@ -92,6 +133,14 @@ def main(argv=None) -> int:
             return 3
 
     try:
+        _acquire_bot_lock()
+    except ConfigError as exc:
+        log.error("refusing to start: %s", exc.message,
+                  extra={"component": "telegram.bot", "status": "✗"})
+        print(f"✗ {exc.message}", file=sys.stderr)
+        return 3
+
+    try:
         bot.poll_forever(max_iterations=1 if args.once else None)
     except ConfigError as exc:
         log.error("bot cannot start: %s", exc.message,
@@ -99,6 +148,8 @@ def main(argv=None) -> int:
         print(f"✗ {exc.message}", file=sys.stderr)
         print("Set TELEGRAM_BOT_TOKEN in .env, then re-run.", file=sys.stderr)
         return 2
+    finally:
+        _release_bot_lock()
     return 0
 
 

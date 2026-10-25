@@ -18,6 +18,7 @@ from typing import Any, Optional
 
 from .errors import HttpError
 from .logging_setup import get_logger
+from .errors import _safe_exception
 
 log = get_logger()
 
@@ -74,7 +75,7 @@ class HttpClient:
             except urllib.error.HTTPError as exc:
                 status = exc.code
                 body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
-                last_error = f"HTTP {status}: {body[:200]}"
+                last_error = _safe_exception(exc)
                 log.warning(
                     "http transport error",
                     extra={"provider": provider, "status": "⏳", "detail": last_error},
@@ -89,7 +90,7 @@ class HttpClient:
                 ) from exc
 
             except (urllib.error.URLError, OSError) as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
+                last_error = _safe_exception(exc)
                 log.warning(
                     "http transport error",
                     extra={"provider": provider, "status": "⏳", "detail": last_error},

@@ -16,6 +16,7 @@ pycryptodome>=3.19          # keccak256
 
 # --- ECDSA fallback / Bitcoin curve primitives ---
 coincurve>=18.0
+ecdsa>=0.18
 
 # --- Bitcoin address encoding ---
 base58>=2.1

@@ -77,6 +77,12 @@ def api(service, settings):
 
 
 @pytest.fixture
+def valid_token(api):
+    token, _ = api.service.sessions.issue("0xabc123")
+    return token
+
+
+@pytest.fixture
 def live(service, settings):
     httpd = create_server(service, "127.0.0.1", 0, settings=settings)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -192,29 +198,31 @@ class TestDecodeTransactionSerialization:
 # ---------------------------------------------------------------------------
 
 class TestMnemonicEndpoint:
-    def test_valid_phrase(self, api):
+    def test_valid_phrase(self, api, valid_token):
         r = api.tools_convert_mnemonic(
             {"phrase": "legal winner thank year wave sausage worth useful legal "
-                       "winner thank yellow"})
+                       "winner thank yellow", "session_token": valid_token})
         assert r["valid"] is True
         assert r["status"] == "✓"
 
-    def test_invalid_checksum_is_not_an_error(self, api):
+    def test_invalid_checksum_is_not_an_error(self, api, valid_token):
         r = api.tools_convert_mnemonic(
             {"phrase": "legal winner thank year wave sausage worth useful legal "
-                       "winner thank thank"})
+                       "winner thank thank", "session_token": valid_token})
         assert r["valid"] is False
         assert r["status"] == "✗"
 
-    def test_missing_phrase_is_a_validation_error(self, api):
+    def test_missing_phrase_is_a_validation_error(self, api, valid_token):
         from app.errors import ValidationError
         with pytest.raises(ValidationError):
-            api.tools_convert_mnemonic({})
+            api.tools_convert_mnemonic({"session_token": valid_token})
 
-    def test_route_is_wired(self, live):
+    def test_route_is_wired(self, live, api):
+        token, _ = api.service.sessions.issue("0xabc123")
         status, body = _post(live, "/api/tools/mnemonic",
                              {"phrase": "legal winner thank year wave sausage worth "
-                                        "useful legal winner thank yellow"})
+                                        "useful legal winner thank yellow",
+                              "session_token": token})
         assert status == 200
         assert body["valid"] is True
 
@@ -224,23 +232,24 @@ class TestMnemonicEndpoint:
 # ---------------------------------------------------------------------------
 
 class TestCalculatorEndpoint:
-    def test_derives_known_addresses(self, api):
-        r = api.tools_crypto_calculator({"key": "0" * 63 + "1"})
+    def test_derives_known_addresses(self, api, valid_token):
+        r = api.tools_crypto_calculator({"key": "0" * 63 + "1", "session_token": valid_token})
         assert r["chains"]["bitcoin"]["p2pkh_compressed"] == \
             "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH"
 
-    def test_out_of_range_key_is_reported_not_raised(self, api):
-        r = api.tools_crypto_calculator({"key": "00" * 32})
+    def test_out_of_range_key_is_reported_not_raised(self, api, valid_token):
+        r = api.tools_crypto_calculator({"key": "00" * 32, "session_token": valid_token})
         assert r["in_range"] is False
         assert r["chains"] == {}
 
-    def test_missing_key_is_a_validation_error(self, api):
+    def test_missing_key_is_a_validation_error(self, api, valid_token):
         from app.errors import ValidationError
         with pytest.raises(ValidationError):
-            api.tools_crypto_calculator({})
+            api.tools_crypto_calculator({"session_token": valid_token})
 
-    def test_route_is_wired(self, live):
-        status, body = _post(live, "/api/tools/calculator", {"key": "0" * 63 + "1"})
+    def test_route_is_wired(self, live, api):
+        token, _ = api.service.sessions.issue("0xabc123")
+        status, body = _post(live, "/api/tools/calculator", {"key": "0" * 63 + "1", "session_token": token})
         assert status == 200
         assert body["in_range"] is True
 
@@ -263,37 +272,39 @@ def _wallet_dat() -> bytes:
 
 
 class TestWalletDatEndpoint:
-    def test_accepts_base64_upload(self, api):
+    def test_accepts_base64_upload(self, api, valid_token):
         r = api.tools_parse_wallet_dat(
-            {"base64_data": base64.b64encode(_wallet_dat()).decode()})
+            {"base64_data": base64.b64encode(_wallet_dat()).decode(), "session_token": valid_token})
         assert r["encrypted"] is True
         assert r["version"] == 169900
         assert "wallet version" in r["records"]
 
-    def test_accepts_a_server_side_path(self, api, tmp_path):
+    def test_accepts_a_server_side_path(self, api, tmp_path, valid_token):
         p = tmp_path / "wallet.dat"
         p.write_bytes(_wallet_dat())
-        r = api.tools_parse_wallet_dat({"path": str(p)})
+        r = api.tools_parse_wallet_dat({"path": str(p), "session_token": valid_token})
         assert r["source"] == str(p)
 
-    def test_missing_file_is_a_validation_error(self, api):
+    def test_missing_file_is_a_validation_error(self, api, valid_token):
         from app.errors import ValidationError
         with pytest.raises(ValidationError):
-            api.tools_parse_wallet_dat({"path": "/nonexistent/wallet.dat"})
+            api.tools_parse_wallet_dat({"path": "/nonexistent/wallet.dat", "session_token": valid_token})
 
-    def test_neither_source_is_a_validation_error(self, api):
+    def test_neither_source_is_a_validation_error(self, api, valid_token):
         from app.errors import ValidationError
         with pytest.raises(ValidationError):
-            api.tools_parse_wallet_dat({})
+            api.tools_parse_wallet_dat({"session_token": valid_token})
 
-    def test_bad_base64_is_a_validation_error(self, api):
+    def test_bad_base64_is_a_validation_error(self, api, valid_token):
         from app.errors import ValidationError
         with pytest.raises(ValidationError):
-            api.tools_parse_wallet_dat({"base64_data": "!!!not-base64!!!"})
+            api.tools_parse_wallet_dat({"base64_data": "!!!not-base64!!!", "session_token": valid_token})
 
-    def test_route_is_wired(self, live):
+    def test_route_is_wired(self, live, api):
+        token, _ = api.service.sessions.issue("0xabc123")
         status, body = _post(live, "/api/tools/wallet-dat",
-                             {"base64_data": base64.b64encode(_wallet_dat()).decode()})
+                             {"base64_data": base64.b64encode(_wallet_dat()).decode(),
+                              "session_token": token})
         assert status == 200
         assert body["encrypted"] is True
 
@@ -459,3 +470,40 @@ class TestDeriveAddressesEndpoint:
         assert len(body["btc"]) == 2
         assert len(body["eth"]) == 2
         assert "error" not in body or body.get("error") is None
+
+
+# ---------------------------------------------------------------------------
+# Authentication regression tests for sensitive tool endpoints
+# ---------------------------------------------------------------------------
+
+class TestSensitiveToolAuth:
+    """Protected tool endpoints must reject unauthenticated and invalid sessions."""
+
+    def test_mnemonic_requires_session_token(self, api):
+        from app.errors import SignatureError
+        with pytest.raises(SignatureError, match="session_token is required"):
+            api.tools_convert_mnemonic({"phrase": "legal winner thank year wave sausage worth useful legal winner thank yellow"})
+
+    def test_calculator_requires_session_token(self, api):
+        from app.errors import SignatureError
+        with pytest.raises(SignatureError, match="session_token is required"):
+            api.tools_crypto_calculator({"key": "0" * 63 + "1"})
+
+    def test_wallet_dat_requires_session_token(self, api):
+        from app.errors import SignatureError
+        with pytest.raises(SignatureError, match="session_token is required"):
+            api.tools_parse_wallet_dat({"base64_data": "dGVzdA=="})
+
+    def test_mnemonic_rejects_expired_token(self, api):
+        from app.auth import SessionIssuer
+        # Create a token that is already expired
+        issuer = SessionIssuer(secret=api.service.sessions.secret.decode(), ttl_seconds=-3600)
+        expired_token, _ = issuer.issue("0xabc123")
+        from app.errors import SignatureError
+        with pytest.raises(SignatureError):
+            api.tools_convert_mnemonic({"phrase": "legal winner thank year wave sausage worth useful legal winner thank yellow", "session_token": expired_token})
+
+    def test_mnemonic_rejects_malformed_token(self, api):
+        from app.errors import SignatureError
+        with pytest.raises(SignatureError):
+            api.tools_convert_mnemonic({"phrase": "legal winner thank year wave sausage worth useful legal winner thank yellow", "session_token": "not-a-token"})

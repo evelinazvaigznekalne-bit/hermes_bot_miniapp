@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .errors import _safe_detail
+
 OK = "✓"
 FAIL = "✗"
 PENDING = "⏳"
@@ -113,6 +115,10 @@ class StatusTracker:
         if not self.log_path:
             return
         record = {"key": key, **entry.as_dict()}
+        # Sanitize detail before persisting
+        detail = record.get("detail")
+        if detail and _safe_detail(detail) != detail:
+            record["detail"] = "internal"
         with self.log_path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 

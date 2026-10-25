@@ -5,10 +5,24 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Secrets: .env plus every rotated/backup copy. Never let a credential reach
+# the build context.
 .env
+.env.*
+.env.bak*
+*.env
+*.env.bak*
+
 *.log
 logs/
 .run/
 data/
 *.dat
+*.wallet
 *.bak
+.git/
+.github/
+tests/
+docs/
+*.md

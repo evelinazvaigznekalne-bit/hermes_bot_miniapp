@@ -276,6 +276,103 @@ _family(StrategyFamily(
 ))
 
 
+_family(StrategyFamily(
+    key="social_engineering",
+    label="Social engineering / OSINT",
+    description=(
+        "The answer is a person, a handle, an organisation, or a published trace of one. "
+        "The work is searching, not computing: the information is public but scattered."
+    ),
+    approach=(
+        "Start with the author's own public footprint -- GitHub, Twitter/X, LinkedIn, blog, domain.",
+        "Cross-reference handles across services; reuse of a username is a strong identity signal.",
+        "Treat every date, location, or named entity in the puzzle as a search term, not decoration.",
+        "Confirm a candidate by finding the same identifier in two independent sources.",
+    ),
+    tools=("web search", "GitHub API", "Telegram / Twitter search", "the Wayback Machine"),
+    compute="none",
+    signals=("twitter", "github", "linkedin", "handle", "username", "osint", "person",
+             "author", "domain", "email", "website", "social", "reddit"),
+))
+
+_family(StrategyFamily(
+    key="data_leak",
+    label="Data leak / breach material",
+    description=(
+        "The answer is inside a leaked dataset: a paste, a breach dump, a GitHub commit, "
+        "a configuration file. The work is finding the right copy of the data and reading it."
+    ),
+    approach=(
+        "Search for the dataset by hash (SHA1/MD5) rather than by name; names change between mirrors.",
+        "Verify the file's integrity against a hash the author published, if any, before using it.",
+        "Look for the target identifier in the smallest relevant slice first (one account, one domain).",
+        "Never paste raw leaked material into a shared tool; redact on your side.",
+    ),
+    tools=("haveibeenpwned", "GitHub search", "paste site archives", "dehashed"),
+    compute="none",
+    signals=("leak", "breach", "dump", "paste", "exposed", "database", "credential",
+             "password list", "rockyou", "pwn", "github commit", "config file"),
+))
+
+_family(StrategyFamily(
+    key="oracle_based",
+    label="Oracle / prediction-market",
+    description=(
+        "The puzzle answer is a future event, a market outcome, or a price. "
+        "The work is querying the right oracle (Polymarket, blockchain price feed, API)."
+    ),
+    approach=(
+        "Identify the exact event or asset the oracle tracks; markets use precise slugs.",
+        "Query multiple independent oracles and require consensus before treating a value as ground truth.",
+        "Treat resolution rules as data: 'binary' vs 'multi-outcome' changes how you score.",
+        "For price-based puzzles, use the price at the puzzle's timestamp, not now.",
+    ),
+    tools=("Polymarket API", "coinGecko", "chainlink feed", "blockchain price tx"),
+    compute="none",
+    signals=("market", "polymarket", "oracle", "prediction", "price", "odds", "resolve",
+             "event", "outcome", "feed"),
+))
+
+_family(StrategyFamily(
+    key="ml_generated",
+    label="ML / model-generated puzzle",
+    description=(
+        "The puzzle was created or obfuscated by a model: steganographic noise, synthetic text, "
+        "or a latent-space encoding. The attack is either model-inversion or pattern extraction."
+    ),
+    approach=(
+        "Determine the model family first (diffusion, GAN, transformer) -- each has known inversion weaknesses.",
+        "For steganographic noise, try the same model in reverse generation mode with the payload as conditioning.",
+        "For latent encodings, train a small regressor on known (input, output) pairs if available.",
+        "Document every intermediate output; ML failures are rarely clean negatives.",
+    ),
+    tools=("the same model in reverse", "a regression harness", "image feature extractors"),
+    compute="gpu",
+    signals=("diffusion", "gan", "latent", "synthetic", "generated", "model", "stable diffusion",
+             "dall-e", "midjourney", "text-to-image"),
+))
+
+_family(StrategyFamily(
+    key="api_abstraction",
+    label="API / web-service abuse",
+    description=(
+        "The puzzle hides or gates data behind a web API, RPC endpoint, or smart-contract call. "
+        "The work is calling the right endpoint with the right parameters."
+    ),
+    approach=(
+        "Enumerate all endpoints the service exposes; the answer is rarely at the one the UI favours.",
+        "Check for IDOR or parameter tampering: sequential IDs, missing auth, rate-limit bypass.",
+        "Read the API's OpenAPI/Swagger spec if available; it removes guesswork.",
+        "For smart-contract puzzles, call every view/pure function and inspect the events log.",
+    ),
+    tools=("curl/httpie", "OpenAPI spec", "etherscan / blockscout read calls", "web3.py"),
+    compute="cpu",
+    mechanisms=("smart-contract", "web-tree"),
+    signals=("api", "endpoint", "rest", "graphql", "rpc", "web3", "contract call",
+             "function", "view()", "pure", "getter", "json-rpc"),
+))
+
+
 # Fine-grained catalog mechanism -> strategy family.
 TYPE_TO_FAMILY: Dict[str, str] = {
     "bip39-seed": "guessing",

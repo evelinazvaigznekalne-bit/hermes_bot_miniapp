@@ -70,26 +70,74 @@ class Monitor:
 
     def _check_address(self, addr: str, puzzle) -> Optional[MonitorEvent]:
         """Check a single puzzle address."""
-        # In production, this would query mempool.space or similar
-        # For now, we just log that we checked
         state_key = addr
         last = self._last_state.get(state_key, {})
+        last_balance = last.get("balance")
 
-        # Placeholder: in production, fetch balance and compare
-        current_balance = 0  # Would be fetched from API
+        current_balance = self._fetch_balance(addr)
 
-        if last.get("balance") != current_balance:
+        if current_balance is None:
+            # Fetch failed: preserve last known state, do not emit fake event.
+            log.info(
+                "balance fetch failed for %s; keeping last known state %s",
+                addr, last_balance,
+            )
+            return None
+
+        if last_balance is None:
+            # First successful check: establish baseline silently.
+            self._last_state[state_key] = {"balance": current_balance}
+            return None
+
+        if last_balance != current_balance:
             event = MonitorEvent(
                 kind="balance_change",
                 puzzle_number=puzzle.puzzle_number,
                 address=addr,
-                detail=f"Balance changed: {last.get('balance', 0)} -> {current_balance}",
+                detail=f"Balance changed: {last_balance} -> {current_balance}",
             )
             self._last_state[state_key] = {"balance": current_balance}
             return event
 
         self._last_state[state_key] = {"balance": current_balance}
         return None
+
+    def _fetch_balance(self, addr: str) -> Optional[int]:
+        """Fetch confirmed BTC balance from mempool.space.
+
+        Returns:
+            int balance on success (including 0)
+            None on failure (HTTP error, timeout, invalid address, malformed response)
+        """
+        import json
+        import urllib.request
+        import urllib.error
+        url = f"https://mempool.space/api/address/{addr}"
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "hermes-monitor/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = resp.read().decode("utf-8", errors="replace")
+                payload = json.loads(data)
+                chain_stats = payload.get("chain_stats") or {}
+                confirmed = int(chain_stats.get("funded_txo_sum", 0)) - int(
+                    chain_stats.get("spent_txo_sum", 0)
+                )
+                return confirmed
+        except urllib.error.HTTPError as exc:
+            log.warning("balance fetch HTTP error for %s: %s", addr, exc.code)
+            return None
+        except urllib.error.URLError as exc:
+            log.warning("balance fetch network error for %s: %s", addr, exc.reason)
+            return None
+        except (json.JSONDecodeError, ValueError) as exc:
+            log.warning("balance fetch malformed response for %s: %s", addr, exc)
+            return None
+        except Exception as exc:
+            log.warning("balance fetch failed for %s: %s", addr, exc)
+            return None
 
     def _persist(self, events: List[MonitorEvent]) -> None:
         """Append events to the monitor log."""
@@ -100,11 +148,28 @@ class Monitor:
 
     def status(self) -> Dict[str, Any]:
         """Get current monitoring status."""
+        event_count = 0
+        last_check_ts = None
+        if self.log_path.is_file():
+            try:
+                lines = self.log_path.read_text().splitlines()
+                event_count = len(lines)
+                if lines:
+                    last_line = lines[-1].strip()
+                    try:
+                        last_event = json.loads(last_line)
+                        last_check_ts = last_event.get("timestamp")
+                    except json.JSONDecodeError:
+                        pass
+            except Exception:
+                pass
+
         return {
             "watching": len(KNOWN_PUZZLES),
             "interval_sec": self.interval_sec,
-            "events_logged": len(self.events),
-            "last_check": datetime.now(timezone.utc).isoformat(),
+            "events_logged": event_count,
+            "last_check": last_check_ts or datetime.now(timezone.utc).isoformat(),
+            "daemon_status": self._daemon_status(),
             "log_path": str(self.log_path),
             "puzzles": [
                 {
@@ -115,6 +180,23 @@ class Monitor:
                 for addr, p in KNOWN_PUZZLES.items()
             ],
         }
+
+    def _daemon_status(self) -> str:
+        """Check if the monitor daemon is running."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["ps", "-A", "-o", "pid,args"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            for line in result.stdout.splitlines()[1:]:
+                if "python3" in line and "app.monitor" in line:
+                    return "running"
+        except Exception:
+            pass
+        return "stopped"
 
 
 def run_monitor(interval_sec: int = 900) -> None:

@@ -11,7 +11,7 @@
   if (tg) { tg.ready(); tg.expand(); }
 
   const el = (id) => document.getElementById(id);
-  const state = { address: null, token: null, challenge: null, busy: false, paypalSDK: null, scanCount: 0, puzzlesFound: 0, tracked: 0, user: null, walletConnected: false };
+  const state = { address: null, token: null, walletSessionToken: null, challenge: null, busy: false, paypalSDK: null, scanCount: 0, puzzlesFound: 0, tracked: 0, user: null, walletConnected: false };
 
   // ---- Onboarding flow: login first, then wallet, then main app ----
   function initOnboarding() {
@@ -29,8 +29,10 @@
       gate.classList.add("hidden");
       // Check if wallet was connected
       const walletAddr = localStorage.getItem("hermes_wallet_addr");
-      if (walletAddr) {
+      const walletSessionToken = localStorage.getItem("hermes_main_wallet_session_token");
+      if (walletAddr && walletSessionToken) {
         state.address = walletAddr;
+        state.walletSessionToken = walletSessionToken;
         state.walletConnected = true;
         walletGate.classList.add("hidden");
         mainApp.classList.remove("hidden");
@@ -151,6 +153,12 @@
           nonce: state.challenge.nonce,
         });
         if (result.verified) {
+          if (!result.session_token) {
+            status.textContent = "Wallet verified, but no session token was returned. Please try again.";
+            return;
+          }
+          state.walletSessionToken = result.session_token;
+          localStorage.setItem("hermes_main_wallet_session_token", result.session_token);
           state.walletConnected = true;
           localStorage.setItem("hermes_wallet_addr", state.address);
           el("wallet-gate").classList.add("hidden");
@@ -185,7 +193,9 @@
         localStorage.removeItem("hermes_token");
         localStorage.removeItem("hermes_user");
         localStorage.removeItem("hermes_wallet_addr");
+        localStorage.removeItem("hermes_main_wallet_session_token");
         state.token = null;
+        state.walletSessionToken = null;
         state.user = null;
         state.address = null;
         state.walletConnected = false;
@@ -635,7 +645,7 @@
     try {
       const payload = await apiPost("/api/wallet/assets", {
         address: state.address,
-        session_token: state.token,
+        session_token: state.walletSessionToken || state.token,
         include_puzzles: el("puzzles-toggle").checked,
       });
       const wallet = payload.wallet;

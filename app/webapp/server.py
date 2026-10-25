@@ -331,12 +331,16 @@ class MiniAppAPI:
         return self.service.catalog.summary(self._caller_tier(body))
 
     # -- inventory (operator-only) ----------------------------------------
-    def _require_owner(self, body: Dict[str, Any]) -> str:
-        """Inventory lists this device's files — owner session only."""
+    def _require_session(self, body: Dict[str, Any]) -> str:
+        """Require a valid session token; return the bound address."""
         token = body.get("session_token")
         if not token:
             raise SignatureError("session_token is required")
-        address = self.service.require_session(token)
+        return self.service.require_session(token)
+
+    def _require_owner(self, body: Dict[str, Any]) -> str:
+        """Inventory lists this device's files — owner session only."""
+        address = self._require_session(body)
         if self.service.tier_for(address) is not Tier.OWNER:
             # Same response whether the session is invalid or merely unpaid, so
             # a paid user cannot probe for the existence of the feature.
@@ -478,6 +482,7 @@ class MiniAppAPI:
 
     def tools_convert_mnemonic(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """BIP39 phrase -> entropy/seed/addresses, with checksum validation."""
+        self._require_session(body)
         from ..crypto_tools import DecodeError
 
         phrase = str(body.get("phrase") or body.get("mnemonic") or "")
@@ -496,6 +501,7 @@ class MiniAppAPI:
 
     def tools_crypto_calculator(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """Given a private key (hex or WIF), derive every address it controls."""
+        self._require_session(body)
         from ..crypto_tools import DecodeError
 
         key = str(body.get("key") or body.get("private_key") or "")
@@ -515,6 +521,7 @@ class MiniAppAPI:
         Accepts base64 file content (what a browser upload gives) or a server-side
         path.  Key bytes are redacted unless ``include_key_bytes`` is explicitly set.
         """
+        self._require_session(body)
         from ..crypto_tools import DecodeError
 
         b64 = str(body.get("base64_data") or "")
@@ -963,8 +970,9 @@ def make_handler(api: MiniAppAPI):
             except AppError as exc:
                 return self._send_json(exc.as_dict(), 400)
             except Exception as exc:  # pragma: no cover - defensive
+                from ..errors import _safe_exception
                 log.warning("GET failed", extra={"component": "web",
-                                                 "detail": str(exc)})
+                                                 "detail": _safe_exception(exc)})
                 return self._send_json({"error": "internal_error"}, 500)
 
         def do_POST(self) -> None:  # noqa: N802
@@ -1114,8 +1122,9 @@ def make_handler(api: MiniAppAPI):
             except PayPalError as exc:
                 return self._send_json(exc.as_dict(), 502)
             except Exception as exc:  # pragma: no cover - defensive
+                from ..errors import _safe_exception
                 log.warning("POST failed", extra={"component": "web",
-                                                  "detail": str(exc)})
+                                                  "detail": _safe_exception(exc)})
                 return self._send_json({"error": "internal_error"}, 500)
 
         def log_message(self, fmt: str, *args) -> None:  # quieter default log

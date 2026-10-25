@@ -112,8 +112,9 @@ class MemePolClient:
                 headers=self._headers(),
             )
         except Exception as exc:
+            from ..errors import _safe_exception
             return {"ok": False, "endpoint": url,
-                    "detail": f"{type(exc).__name__}: {exc}"}
+                    "detail": _safe_exception(exc)}
         return {"ok": True, "endpoint": url,
                 "detail": "endpoint reachable and key accepted",
                 "payload_keys": sorted(data)[:10] if isinstance(data, dict) else None}
