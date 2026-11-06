@@ -41,3 +41,8 @@ def tracker(tmp_path) -> StatusTracker:
 SAMPLE_EVM = "0xDe0DAFC80d487b8aE652bBF906ac6c6007aE3A5e"
 #: Bitcoin genesis coinbase address.
 SAMPLE_BTC = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+
+
+@pytest.fixture(autouse=True)
+def _session_secret(monkeypatch):
+    monkeypatch.setenv("SESSION_SECRET", "test-only-secret-" + "0" * 32)
