@@ -207,3 +207,51 @@ class TestApiUnit:
         api = MiniAppAPI(service, settings=settings)
         with pytest.raises(Exception):
             api.telegram_validate({})
+import json
+import urllib.request
+import urllib.error
+
+
+def _post(base, path, body):
+    req = urllib.request.Request(
+        base + path, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+class TestWalletOwnerKey:
+    @pytest.fixture(autouse=True)
+    def _isolate(self, monkeypatch, tmp_path):
+        from app import users, auth
+        monkeypatch.setattr(users, "WALLET_FILE", tmp_path / "wallets.json")
+        monkeypatch.setattr(auth, "SESSION_STORE_PATH", str(tmp_path / "sessions.json"))
+
+    def test_wallets_survive_a_new_session(self, live_server, service):
+        tok1, _ = service.sessions.issue(SAMPLE_EVM)
+        service.sessions.ttl += 1          # a later login gets a different token
+        tok2, _ = service.sessions.issue(SAMPLE_EVM)
+        assert tok1 != tok2
+        status, _ = _post(live_server, "/api/wallet/add",
+                          {"address": SAMPLE_EVM, "label": "main", "session_token": tok1})
+        assert status == 200
+        status, data = _post(live_server, "/api/wallet/list", {"session_token": tok2})
+        assert status == 200
+        assert [w["address"] for w in data["wallets"]] == [SAMPLE_EVM]
+
+    def test_forged_token_is_rejected(self, live_server):
+        status, data = _post(live_server, "/api/wallet/list",
+                             {"session_token": "x:9999999999:deadbeef"})
+        assert status == 400
+        assert data["error"] == "SignatureError"
+
+    def test_duplicate_wallet_is_a_400_not_a_500(self, live_server, service):
+        tok, _ = service.sessions.issue(SAMPLE_EVM)
+        body = {"address": SAMPLE_EVM, "label": "a", "session_token": tok}
+        assert _post(live_server, "/api/wallet/add", body)[0] == 200
+        status, data = _post(live_server, "/api/wallet/add", body)
+        assert status == 400
+        assert "already exists" in data["message"]
