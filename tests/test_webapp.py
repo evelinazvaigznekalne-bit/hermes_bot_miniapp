@@ -207,3 +207,99 @@ class TestApiUnit:
         api = MiniAppAPI(service, settings=settings)
         with pytest.raises(Exception):
             api.telegram_validate({})
+import json
+import urllib.request
+import urllib.error
+
+
+def _post(base, path, body):
+    req = urllib.request.Request(
+        base + path, data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+class TestWalletOwnerKey:
+    @pytest.fixture(autouse=True)
+    def _isolate(self, monkeypatch, tmp_path):
+        from app import users, auth
+        monkeypatch.setattr(users, "WALLET_FILE", tmp_path / "wallets.json")
+        monkeypatch.setattr(auth, "SESSION_STORE_PATH", str(tmp_path / "sessions.json"))
+
+    def test_wallets_survive_a_new_session(self, live_server, service):
+        tok1, _ = service.sessions.issue(SAMPLE_EVM)
+        service.sessions.ttl += 1          # a later login gets a different token
+        tok2, _ = service.sessions.issue(SAMPLE_EVM)
+        assert tok1 != tok2
+        status, _ = _post(live_server, "/api/wallet/add",
+                          {"address": SAMPLE_EVM, "label": "main", "session_token": tok1})
+        assert status == 200
+        status, data = _post(live_server, "/api/wallet/list", {"session_token": tok2})
+        assert status == 200
+        assert [w["address"] for w in data["wallets"]] == [SAMPLE_EVM]
+
+    def test_forged_token_is_rejected(self, live_server):
+        status, data = _post(live_server, "/api/wallet/list",
+                             {"session_token": "x:9999999999:deadbeef"})
+        assert status == 400
+        assert data["error"] == "SignatureError"
+
+    def test_duplicate_wallet_is_a_400_not_a_500(self, live_server, service):
+        tok, _ = service.sessions.issue(SAMPLE_EVM)
+        body = {"address": SAMPLE_EVM, "label": "a", "session_token": tok}
+        assert _post(live_server, "/api/wallet/add", body)[0] == 200
+        status, data = _post(live_server, "/api/wallet/add", body)
+        assert status == 400
+        assert "already exists" in data["message"]
+
+
+class TestWalletOwnerKeyUserSessions:
+    """Covers the user: branch of _wallet_owner (stored, non-HMAC sessions)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate(self, monkeypatch, tmp_path):
+        from app import users, auth
+        monkeypatch.setattr(users, "WALLET_FILE", tmp_path / "wallets.json")
+        monkeypatch.setattr(auth, "SESSION_STORE_PATH", str(tmp_path / "sessions.json"))
+
+    @staticmethod
+    def _store_session(token, user_id, expires_in=3600):
+        import time
+        from app import auth
+        sessions = auth._load_sessions()
+        sessions[token] = {"user_id": user_id,
+                           "expires_at": time.time() + expires_in}
+        auth._save_sessions(sessions)
+
+    def test_wallets_shared_across_sessions_of_same_user(self, live_server):
+        self._store_session("tok-a-1", "user-a")
+        self._store_session("tok-a-2", "user-a")
+        status, _ = _post(live_server, "/api/wallet/add",
+                          {"address": SAMPLE_EVM, "label": "main",
+                           "session_token": "tok-a-1"})
+        assert status == 200
+        status, data = _post(live_server, "/api/wallet/list",
+                             {"session_token": "tok-a-2"})
+        assert status == 200
+        assert [w["address"] for w in data["wallets"]] == [SAMPLE_EVM]
+
+    def test_other_users_do_not_see_the_wallets(self, live_server):
+        self._store_session("tok-a", "user-a")
+        self._store_session("tok-b", "user-b")
+        _post(live_server, "/api/wallet/add",
+              {"address": SAMPLE_EVM, "label": "main", "session_token": "tok-a"})
+        status, data = _post(live_server, "/api/wallet/list",
+                             {"session_token": "tok-b"})
+        assert status == 200
+        assert data["wallets"] == []
+
+    def test_expired_session_is_rejected(self, live_server):
+        self._store_session("tok-old", "user-a", expires_in=-10)
+        status, data = _post(live_server, "/api/wallet/list",
+                             {"session_token": "tok-old"})
+        assert status == 400
+        assert data["error"] == "SignatureError"
