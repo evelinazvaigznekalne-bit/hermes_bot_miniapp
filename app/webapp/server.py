@@ -783,16 +783,34 @@ class MiniAppAPI:
         revoked = revoke_session(token)
         return {"valid": True, "revoked": revoked}
 
+    def _wallet_owner(self, token: str) -> str:
+        """Stable per-user key for wallet storage (never the raw token)."""
+        if not token:
+            raise SignatureError("session_token is required")
+        session = None
+        try:
+            from ..auth import validate_session
+            session = validate_session(token)
+        except Exception:
+            session = None
+        if session is not None:
+            return "user:%s" % session.get("user_id")
+        # HMAC token: require_session raises SignatureError if invalid/expired
+        return "addr:%s" % str(self.service.require_session(token)).lower()
+
     def wallet_add(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """Add a wallet to the user's account."""
         from ..users import add_wallet
-        return add_wallet(body.get("address", ""), body.get("label", ""),
-                         body.get("session_token", ""))
+        owner = self._wallet_owner(body.get("session_token", ""))
+        try:
+            return add_wallet(body.get("address", ""), body.get("label", ""), owner)
+        except ValueError as exc:
+            raise ValidationError(str(exc))
 
     def wallet_list(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """List user's wallets."""
         from ..users import list_wallets
-        return list_wallets(body.get("session_token", ""))
+        return list_wallets(self._wallet_owner(body.get("session_token", "")))
 
     def market_overview(self) -> Dict[str, Any]:
         """Return market overview stats for tracked tokens."""
