@@ -27,7 +27,7 @@ set_env() {
   echo
   [ -z "$value" ] && { echo "  · unchanged"; return 0; }
   if grep -q "^${key}=" "$ENV_FILE"; then
-    /data/data/com.termux/files/usr/bin/python3 - "$ENV_FILE" "$key" "$value" <<'PYEOF'
+    python3 - "$ENV_FILE" "$key" "$value" <<'PYEOF'
 import sys, pathlib
 path, key, value = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 lines = path.read_text().splitlines()

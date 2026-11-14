@@ -118,7 +118,7 @@ def help_text(display_name: str = "Hermes Wallet Inspector") -> str:
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🧩 <b>Bitcoin Puzzle</b>\n"
         "  /bitcoinpuzzle [address|estimate start end] — puzzle solver\n"
-        "    <i>Example: /bitcoinpuzzle 1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw</i>\n"
+        "    <i>Example: /bitcoinpuzzle 1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH</i>\n"
         "    <i>Example: /bitcoinpuzzle estimate 0x8000 0xFFFF</i>\n"
         "  /websources [query] — crypto tool directories\n"
         "    <i>Example: /websources rsa</i>\n"

@@ -218,14 +218,9 @@ class TestRunBotIntegration:
         project = Path(__file__).resolve().parent.parent
         script = project / "scripts" / "run_bot.sh"
 
-        token = ""
-        proj_env = project / ".env"
-        if proj_env.exists():
-            for line in proj_env.read_text().splitlines():
-                if line.startswith("TELEGRAM_BOT_TOKEN="):
-                    token = line.split("=", 1)[1].strip().strip("'\"")
-        if not token:
-            pytest.skip("project .env has no token to test the clash with")
+        # Disposable test-only token. The gateway digest check must catch
+        # the collision before any Telegram API request is attempted.
+        token = "987654321:AbCdEfGhIjKlMnOpQrStUvWxYz012345678"
 
         # A fake "gateway" env file containing the project's own token forces
         # the clash deterministically, regardless of the machine's live tokens.
@@ -233,8 +228,22 @@ class TestRunBotIntegration:
         fake_gw.write_text(f"TELEGRAM_BOT_TOKEN={token}\n")
 
         env = dict(os.environ)
+        env["TELEGRAM_BOT_TOKEN"] = token
         env["HERMES_GATEWAY_ENV_FILES"] = str(fake_gw)
-        env["PY"] = "/bin/false"          # cannot start a bot even if reached
+        # Allow configuration and token checks, but block actual bot startup.
+        wrapper = tmp_path / "python-guard"
+        wrapper.write_text(f"""#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ "$arg" = "app.bot_main" ]; then
+    echo "Blocked bot startup by test wrapper" >&2
+    kill -TERM "$PPID"
+    exit 99
+  fi
+done
+exec "{sys.executable}" "$@"
+""")
+        wrapper.chmod(0o755)
+        env["PY"] = str(wrapper)
         env.pop("SKIP_TOKEN_CHECK", None)
         # Isolate the script's state directory.  Without this the duplicate-supervisor
         # check at the top of run_bot.sh short-circuits against whatever supervisor is

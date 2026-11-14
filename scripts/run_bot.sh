@@ -11,7 +11,7 @@ set -uo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
-PY="${PYTHON:-/data/data/com.termux/files/usr/bin/python3}"
+PY="${PY:-${PYTHON:-$(command -v python3)}}"
 # BOT_RUN_DIR lets a caller (a test, a second instance) use its own state directory so
 # the duplicate-supervisor check cannot short-circuit against a supervisor that is
 # legitimately running elsewhere.  Defaults to the project's own .run, so normal use and

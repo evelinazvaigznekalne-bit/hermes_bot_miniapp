@@ -115,9 +115,8 @@ class TestRecoverPubkey:
             import coincurve
             pk = coincurve.PrivateKey(b"\x01" * 32)
             msg = b"hello"
-            sig = pk.sign(msg)
-            if len(sig) != 65:
-                pytest.skip("need 65-byte recoverable sig")
+            sig = pk.sign_recoverable(msg)
+            assert len(sig) == 65
             result = recover_pubkey_from_sig(sig.hex(), msg.hex(), hasher="sha256")
             assert "pubkey_compressed" in result
             assert "pubkey_uncompressed" in result

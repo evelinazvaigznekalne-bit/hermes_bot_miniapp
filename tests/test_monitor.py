@@ -185,7 +185,7 @@ class TestMonitorText:
                 "puzzles": [
                     {
                         "puzzle_number": 1,
-                        "address": "1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw",
+                        "address": "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
                         "amount_btc": 1.0,
                     },
                 ],

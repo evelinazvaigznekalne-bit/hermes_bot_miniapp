@@ -203,8 +203,8 @@ def verify_ecdsa_signature(pubkey_hex: str, message_hex: str,
 
     pk = coincurve.PublicKey(pub)
     if len(sig) == 64:
-        r, s = sig[:32], sig[32:]
-        der = pk._rfc6979_signature_to_der(r, s)
+        from coincurve.ecdsa import cdata_to_der, deserialize_compact
+        der = cdata_to_der(deserialize_compact(sig))
     else:
         der = sig
 

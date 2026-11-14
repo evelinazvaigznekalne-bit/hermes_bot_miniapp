@@ -40,3 +40,6 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+.env.backup-*
+.venv311/

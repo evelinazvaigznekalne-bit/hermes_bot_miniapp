@@ -318,13 +318,16 @@ def test_recoverable_key_is_not_needs_input():
 # ---------------------------------------------------------------------------
 
 
+CATALOGUE_PATH = __import__("pathlib").Path.home() / "ocp" / "puzzles.json"
+
+
 @pytest.mark.skipif(
-    not __import__("pathlib").Path("/data/data/com.termux/files/home/ocp/puzzles.json").exists(),
+    not CATALOGUE_PATH.exists(),
     reason="ocp catalogue not present",
 )
 def test_live_catalogue_classifies_all_entries():
     import json
-    data = json.load(open("/data/data/com.termux/files/home/ocp/puzzles.json"))
+    data = json.loads(CATALOGUE_PATH.read_text())
     out = classify_catalog(data["puzzles"])
     assert out["count"] == len(data["puzzles"])
     assert sum(out["distribution"].values()) == len(data["puzzles"])

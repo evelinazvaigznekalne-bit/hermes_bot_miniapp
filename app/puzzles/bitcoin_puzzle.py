@@ -61,49 +61,81 @@ class PuzzleAttempt:
     tested: int = 0
 
 
-# Known puzzle transactions (from the Bitcoin Puzzle community)
-# These are publicly documented puzzle addresses with known keyspace ranges
+# Known puzzle transactions, verified against public references:
+#   https://btcpuzzlesearch.com/puzzle/<n>
+#   https://lotterypuzzle.org/
+# NOTE: txid/block_height are intentionally empty/0 - the values previously
+# shipped here were fabricated. Only address/range/status are source-verified.
 KNOWN_PUZZLES: Dict[str, PuzzleTransaction] = {
-    # Puzzle 1 - range 0x01 - 0x1 (trivial, solved)
-    "1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw": PuzzleTransaction(
-        txid="3a1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
-        address="1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw",
+    # Puzzle 1 - key 0x1, solved 2015-01-15.
+    "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH": PuzzleTransaction(
+        txid="",
+        address="1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH",
         amount_btc=0.0,
-        block_height=308406,
+        block_height=0,
         puzzle_number=1,
         keyspace_range=(0x01, 0x01),
-        description="Puzzle 1 - solved (range 0x01-0x1)",
+        description="Puzzle 1 - solved (range 0x01-0x01, key 0x1)",
     ),
-    # Puzzle 32 - range 0x8000 - 0xFFFF (70 bits)
-    "1LxELwZvgDyjXruDxBzWBdUXBCBbRCr2h3": PuzzleTransaction(
-        txid="4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
-        address="1LxELwZvgDyjXruDxBzWBdUXBCBbRCr2h3",
+    # Puzzle 32 - range 2^31..2^32-1, solved 2015-01-16 (key 0xb862a62e).
+    "1FRoHA9xewq7DjrZ1psWJVeTer8gHRqEvR": PuzzleTransaction(
+        txid="",
+        address="1FRoHA9xewq7DjrZ1psWJVeTer8gHRqEvR",
         amount_btc=0.0,
-        block_height=346194,
+        block_height=0,
         puzzle_number=32,
-        keyspace_range=(0x8000, 0xFFFF),
-        description="Puzzle 32 - range 0x8000-0xFFFF (70 bits)",
+        keyspace_range=(1 << 31, (1 << 32) - 1),
+        description="Puzzle 32 - solved 2015-01-16 (key 0xb862a62e)",
     ),
-    # Puzzle 101 - range 0x1000000000000000000000000000000000000000000000000000000000 - 0x1FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-    "1Q2W3E4R5T6Y7U8I9O0P1A2S3D4F5G6H7J8K9L0Z1X2C3V4B5N6M7Q8W9E0R1T2Y3U": PuzzleTransaction(
-        txid="5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e",
-        address="1Q2W3E4R5T6Y7U8I9O0P1A2S3D4F5G6H7J8K9L0Z1X2C3V4B5N6M7Q8W9E0R1T2Y3U",
-        amount_btc=0.0,
-        block_height=500000,
+    # Puzzle 101 - range 2^100..2^101-1, unsolved, 10.1 BTC.
+    "1CKCVdbDJasYmhswB6HKZHEAnNaDpK7W4n": PuzzleTransaction(
+        txid="",
+        address="1CKCVdbDJasYmhswB6HKZHEAnNaDpK7W4n",
+        amount_btc=10.1,
+        block_height=0,
         puzzle_number=101,
-        keyspace_range=(0x10000000000000000000000000000000000000000000000000000000000,
-                          0x1FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
-        description="Puzzle 101 - 101 bits",
+        keyspace_range=(1 << 100, (1 << 101) - 1),
+        description="Puzzle 101 - unsolved (range 2^100..2^101-1)",
     ),
 }
+
+_B58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+_B58_INDEX = {char: idx for idx, char in enumerate(_B58_ALPHABET)}
+
+
+def _base58check_ok(address: str) -> bool:
+    """True when *address* carries a valid Base58Check checksum."""
+    try:
+        number = 0
+        for char in address:
+            number = number * 58 + _B58_INDEX[char]
+        pad = len(address) - len(address.lstrip("1"))
+        raw = b"\x00" * pad + (
+            number.to_bytes((number.bit_length() + 7) // 8, "big") if number else b""
+        )
+        if len(raw) != 25:
+            return False
+        checksum = hashlib.sha256(hashlib.sha256(raw[:-4]).digest()).digest()[:4]
+        return checksum == raw[-4:]
+    except (KeyError, ValueError, OverflowError):
+        return False
+
+
+_invalid = [addr for addr in KNOWN_PUZZLES if not _base58check_ok(addr)]
+if _invalid:
+    raise ValueError(f"invalid Bitcoin puzzle address(es): {_invalid}")
 
 
 def identify_puzzle_address(address: str) -> Optional[PuzzleTransaction]:
     """Check if an address is a known Bitcoin puzzle address.
 
-    Returns the puzzle metadata if found, None otherwise.
+    Returns the puzzle metadata if found, None otherwise. Addresses without a
+    valid Base58Check checksum never match.
     """
-    return KNOWN_PUZZLES.get(address)
+    puzzle = KNOWN_PUZZLES.get(address)
+    if puzzle is None or not _base58check_ok(address):
+        return None
+    return puzzle
 
 
 def estimate_keyspace(start: int, end: int) -> Dict[str, Any]:

@@ -13,6 +13,7 @@ from app.puzzles.bitcoin_puzzle import (
     brute_force_puzzle,
     run_puzzle_witness,
     _format_duration,
+    _base58check_ok,
 )
 
 
@@ -21,12 +22,12 @@ class TestKnownPuzzles:
         assert len(KNOWN_PUZZLES) > 0
 
     def test_puzzle_1_exists(self):
-        puzzle = identify_puzzle_address("1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw")
+        puzzle = identify_puzzle_address("1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH")
         assert puzzle is not None
         assert puzzle.puzzle_number == 1
 
     def test_puzzle_32_exists(self):
-        puzzle = identify_puzzle_address("1LxELwZvgDyjXruDxBzWBdUXBCBbRCr2h3")
+        puzzle = identify_puzzle_address("1FRoHA9xewq7DjrZ1psWJVeTer8gHRqEvR")
         assert puzzle is not None
         assert puzzle.puzzle_number == 32
 
@@ -34,11 +35,22 @@ class TestKnownPuzzles:
         result = identify_puzzle_address("1UnknownAddressHere123456789")
         assert result is None
 
+    def test_fabricated_addresses_rejected(self):
+        # These were shipped as fake entries; none may ever match again.
+        assert identify_puzzle_address("1PpyGsfXz1TJdYxRBEEGgsat37ZDmLsyWw") is None
+        assert identify_puzzle_address("1LxELwZvgDyjXruDxBzWBdUXBCBbRCr2h3") is None
+        keyboard_pattern = (
+            "1Q2W3E4R5T6Y7U8I9O0P1A2S3D4F5G6H7J8K9L0Z1X2C3V4B5N6M7Q8W9E0R1T2Y3U"
+        )
+        assert identify_puzzle_address(keyboard_pattern) is None
+
     def test_puzzle_metadata_complete(self):
         for addr, puzzle in KNOWN_PUZZLES.items():
             assert puzzle.address == addr
-            assert puzzle.txid
-            assert puzzle.block_height > 0
+            # Only address/range/status are source-verified; txid and
+            # block_height are intentionally unset (previous values were
+            # fabricated), so the checksum is the integrity check.
+            assert _base58check_ok(addr)
             assert puzzle.keyspace_range[0] <= puzzle.keyspace_range[1]
 
 
