@@ -35,9 +35,12 @@ from .memepol import PuzzleEntry
 log = get_logger()
 
 #: Default locations to probe, in order.
+#: The bundled sanitized public catalog (app/data/public_catalog.json) is the
+#: deployment fallback when OCP_DATASET_PATH is not set (e.g. on Render).
 DEFAULT_PATHS = (
     Path.home() / "ocp" / "puzzles.json",
     Path.home() / "open-crypto-puzzles" / "puzzles.json",
+    Path(__file__).resolve().parent.parent / "data" / "public_catalog.json",
 )
 
 
