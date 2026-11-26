@@ -404,9 +404,9 @@ class MiniAppAPI:
     # -- market (token scam detection) ------------------------------------
     def market_scan(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """Scan a token address for scam indicators."""
-        address = body.get("address")
+        address = body.get("address") or body.get("query")
         if not address:
-            raise ValidationError("'address' is required")
+            raise ValidationError("'address' or 'query' is required")
         chain = str(body.get("chain") or "ethereum").strip().lower()
 
         scanner = TokenScanner()
@@ -414,8 +414,25 @@ class MiniAppAPI:
         return result.as_dict()
 
     def tools_file(self, body: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze a file from local storage."""
-        return analyze_file(body.get("path", ""))
+        """Analyze a file from local storage. Session required; path restricted."""
+        token = body.get("session_token")
+        if not token:
+            raise SignatureError("session_token is required for file analysis")
+        try:
+            self.service.require_session(token)
+        except SignatureError:
+            raise SignatureError("invalid or expired session for file analysis")
+        path = str(body.get("path", "")).strip()
+        if not path:
+            raise ValidationError("'path' is required")
+        # Restrict to the caller's home subtree to prevent arbitrary filesystem access.
+        p = Path(path).expanduser()
+        home = Path.home()
+        try:
+            p.resolve().relative_to(home)
+        except ValueError:
+            raise ValidationError("file path must be within your home directory")
+        return analyze_file(str(p))
 
     def tools_decode(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """Decode hex/base64/plain text."""

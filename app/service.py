@@ -17,14 +17,19 @@ from .auth import NonceStore, SessionIssuer, verify_evm_signature
 from .chains.base import AssetReport
 from .chains.registry import build_registry
 from .config import Settings, get_settings
-from .errors import AddressValidationError, ConfigError, NonceError, SignatureError
+from .errors import (
+    AddressValidationError,
+    ConfigError,
+    NonceError,
+    SignatureError,
+    _safe_detail,
+)
 from .logging_setup import get_logger, setup_logging
-from .errors import _safe_detail
 from .puzzles.analysis import PuzzleAnalyzer
 from .puzzles.memepol import MemePolClient
 from .puzzles.ocp import OcpSource
+from .status import OK, FAIL, PENDING, RUNNING, VERIFIED, FAILED, StatusTracker
 from .access import EntitlementStore, Tier, resolve_tier
-from .status import StatusTracker
 
 log = get_logger()
 
@@ -166,14 +171,14 @@ class WalletService:
             raise
         log.info(
             "challenge issued",
-            extra={"component": "auth", "status": "⏳", "address": address},
+            extra={"component": "auth", "status": PENDING, "address": address},
         )
         return {
             "address": address,
             "nonce": nonce,
             "message": message,
             "expires_in": ttl,
-            "status": "⏳",
+            "status": PENDING,
             "instructions": (
                 "Sign `message` client-side with personal_sign (EIP-191). "
                 "Send the resulting signature back. Your private key must "
@@ -188,13 +193,13 @@ class WalletService:
             record = self.nonces.consume(nonce)
         except NonceError as exc:
             self.tracker.fail("wallet_data", exc.message)
-            return VerificationResult(False, None, None, None, "✗", exc.message)
+            return VerificationResult(False, None, None, None, FAIL, exc.message)
 
         challenge = message or record.message
         if record.address.lower() != str(address).lower():
             self.tracker.fail("wallet_data", "nonce was issued for a different address")
             return VerificationResult(
-                False, None, None, None, "✗",
+                False, None, None, None, FAIL,
                 "nonce was issued for a different address",
             )
         try:
@@ -203,18 +208,18 @@ class WalletService:
             self.tracker.fail("wallet_data", exc.message)
             log.warning(
                 "signature verification failed",
-                extra={"component": "auth", "status": "✗", "address": record.address,
+                extra={"component": "auth", "status": FAIL, "address": record.address,
                        "detail": exc.message},
             )
-            return VerificationResult(False, None, None, None, "✗", exc.message)
+            return VerificationResult(False, None, None, None, FAIL, exc.message)
 
         token, expires = self.sessions.issue(recovered)
         self.tracker.ok("wallet_data", "ownership verified via signature")
         log.info(
             "wallet verified",
-            extra={"component": "auth", "status": "✓", "address": recovered},
+            extra={"component": "auth", "status": OK, "address": recovered},
         )
-        return VerificationResult(True, recovered, token, expires, "✓")
+        return VerificationResult(True, recovered, token, expires, OK)
 
     # -- data -------------------------------------------------------------
     def fetch_assets(self, address: str, *, chain: Optional[str] = None,

@@ -7,7 +7,6 @@ control a wallet by signing a one-time challenge, then inspects that wallet's
 **public** assets and chain data.
 
 ---
-
 ## Hard security boundaries
 
 | Rule | Enforcement |
@@ -29,7 +28,7 @@ private key ever leaving the user's device.
 
 ## Architecture
 
-```
+```text
 app/
   config.py            env-only settings, .env parser, secret redaction helpers
   errors.py            typed error hierarchy
@@ -47,15 +46,15 @@ app/
     evm.py             Ethereum + EVM chains (Blockscout + JSON-RPC fallback)
     bitcoin.py         Bitcoin (mempool.space) — fully separate from EVM
     registry.py        default wiring
-  puzzles/
-    memepol.py         MemePol API client (key from env, sent in a header)
-    analysis.py        four-valued verdict engine
-  telegram/
-    bot.py             Bot API client + long-polling command handlers
-    webapp_auth.py     Mini App initData HMAC-SHA256 validation
-  webapp/
-    server.py          stdlib HTTP server + JSON API
-    static/            Mini App frontend (index.html / app.js / styles.css)
+puzzles/
+  memepol.py           MemePol API client (key from env, sent in a header)
+  analysis.py          four-valued verdict engine
+telegram/
+  bot.py             Bot API client + long-polling command handlers
+  webapp_auth.py     Mini App initData HMAC-SHA256 validation
+webapp/
+  server.py          stdlib HTTP server + JSON API
+  static/            Mini App frontend (index.html / app.js / styles.css)
 tests/                 146 tests
 logs/                  created automatically (git-ignored)
 tools/wallet_tools.py  superseded legacy stub, kept for reference only
@@ -138,8 +137,8 @@ MEMEPOL_AUTH_PREFIX=Bearer          # empty for a bare key
 ```
 
 `MemePolClient.ping()` verifies the endpoint and key without printing the key.
-**Full contract, auth variants, record schema and a local reference server:
-[`docs/puzzle-endpoint.md`](docs/puzzle-endpoint.md).**
+Full contract, auth variants, record schema and a local reference server:
+[docs/puzzle-endpoint.md].
 
 ### Verified verdict behaviour
 
@@ -237,8 +236,9 @@ There is intentionally **no** transaction, signing, or broadcast endpoint.
 ```python
 import os
 from app.telegram.bot import TelegramClient
-TelegramClient(os.environ["TELEGRAM_BOT_TOKEN"]).set_webapp_menu(
-    os.environ["TELEGRAM_WEBAPP_URL"])
+TelegramClient(os.environ["TELEGRAM_WEBAPP_URL"]).set_webapp_menu(
+    os.environ["TELEGRAM_WEBAPP_URL"]
+)
 ```
 
 ---
@@ -254,7 +254,7 @@ TelegramClient(os.environ["TELEGRAM_BOT_TOKEN"]).set_webapp_menu(
 | `MEMEPOL_AUTH_HEADER` | no | Auth header name (default `Authorization`) |
 | `MEMEPOL_AUTH_PREFIX` | no | Auth value prefix (default `Bearer`; empty for `X-API-Key`) |
 | `OCP_DATASET_PATH` | no | Path to a local `puzzles.json` (auto-detected if absent) |
-| `PUZZLE_SOURCE` | no | `auto` (default) \| `ocp` \| `memepol` — which source wins |
+| `PUZZLE_SOURCE` | no | `auto` (default) | `ocp` | `memepol` — which source wins |
 | `ETH_RPC_URL` | no | Private RPC; public fallbacks are built in |
 | `BTC_API_BASE` | no | Defaults to `https://mempool.space/api` |
 | `HOST` / `PORT` | no | Server bind (default `127.0.0.1:8080`) |
@@ -290,33 +290,12 @@ is verified against a mock Bot API:
 python3 tests/deploy_check.py
 ```
 
-### Frontend integration (Node, no browser)
-
-`tests/frontend_harness.mjs` loads the **real** `static/app.js` into a minimal
-fake DOM, points its `fetch()` at a **real** server, and stands in for a wallet
-by signing via `tools/sign_message.py`. It proves the frontend actually runs and
-that every endpoint it calls exists and returns the fields it reads:
-
-```bash
-node tests/frontend_harness.mjs http://127.0.0.1:8080
-node tests/frontend_harness.mjs https://<tunnel>.trycloudflare.com
-```
-
 21 checks: app.js executes, the status table and capability line render, the
 connect → challenge → sign → verify flow completes, asset rows are written, the
 session token is carried into the asset request, and no secret reaches the DOM.
+
 Negative controls confirm it has teeth (dead server → 16 failures; a broken
 endpoint → 8 failures naming the missing call).
-
-### Security surface (verified against the public tunnel)
-
-| Probe | Result |
-|---|---|
-| `GET /../config.py`, `..%2f`, `--path-as-is` | `400` — traversal blocked |
-| `GET /.env`, `/logs/app.log` | `404` — not served |
-| 200 KB request body | `400` — capped at 64 KB |
-| 28 rapid POSTs to an expensive endpoint | 20× `200` then `429` |
-| `/health` during an expensive-endpoint block | `200` — separate budget |
 
 ---
 
@@ -346,7 +325,7 @@ bash scripts/tunnel_setup.sh bot.your-domain.com
 It logs in, creates the tunnel, routes DNS, writes `~/.cloudflared/config.yml`
 (mode 600), validates the ingress rules, and records everything in `.env`:
 
-```
+```text
 TUNNEL_MODE=named
 TUNNEL_NAME=hermesgotdat
 TUNNEL_HOSTNAME=bot.your-domain.com
@@ -356,21 +335,14 @@ TELEGRAM_WEBAPP_URL=https://bot.your-domain.com
 
 From then on `bash scripts/start.sh` runs the named tunnel automatically:
 
-```
+```bash
 bash scripts/start.sh              # uses TUNNEL_MODE from .env
 bash scripts/register_miniapp.sh   # register with Telegram — ONCE, not every restart
 ```
 
 Switch back to a quick tunnel any time with `TUNNEL_MODE=quick` in `.env`.
 
-**Notes**
-- `scripts/tunnel_setup.sh` is idempotent — re-running reuses the existing tunnel.
-- It never prints tunnel credentials; `~/.cloudflared/*.json` and `config.yml` are
-  chmod 600. `.env` is chmod 600 too.
-- No inbound ports are opened. The tunnel is an outbound connection only, which
-  matters on a phone behind CGNAT.
-
-### Quick tunnel (default)
+**Quick tunnel (default)**
 
 ```bash
 bash scripts/start.sh --port 8080
@@ -398,7 +370,7 @@ All deployment logic lives in `scripts/` and is idempotent.
 | `scripts/setup_credentials.sh` | Interactively write `.env` (hidden input, `chmod 600`) |
 | `scripts/check_bot_token.py` | Refuse to poll a bot the Hermes gateway already polls (digest compare, exit 3) |
 | `scripts/tunnel_setup.sh` | One-time: create a named Cloudflare tunnel + DNS route for a permanent URL |
-| `scripts/start.sh` | Start server + tunnel (`TUNNEL_MODE=named`\|`quick`), wait for a real `200`, record the URL in `.env` |
+| `scripts/start.sh` | Start server + tunnel (`TUNNEL_MODE=named`|`quick`), wait for a real `200`, record the URL in `.env` |
 | `scripts/stop.sh` | Stop server + tunnel |
 | `scripts/run_bot.sh` | Run the bot with crash-restart supervision |
 | `scripts/register_miniapp.sh` | `getMe`, menu button, command list; prints the manual @BotFather step |
@@ -440,7 +412,7 @@ Verified live:
 
 ```
 anonymous  on an escrow address : matches=0  hints=0  evaluated=49
-                                   locked={"hidden_matches":1,"full_corpus":"…"}
+                                   locked={\"hidden_matches\":1,\"full_corpus\":\"…\"}
 free       on own wallet        : matches=0 (genuinely matches nothing)
 owner      on own wallet        : private_count=12
 owner      querying someone else: verified=False  tier=anonymous  private=no
@@ -457,6 +429,7 @@ assertions that check for the *absence* of private titles).
 `POST /api/security/scan` or `python3 -m app.cli scan` detects private keys, seed
 phrases, API tokens and card numbers — and **stores nothing**. The raw value is
 never returned, logged, or written to disk; only a masked preview and advice.
+
 Tests assert the secret is absent from the response *and* from every log file.
 
 ```bash
@@ -482,16 +455,13 @@ is ever read out or printed:
 | `4` | token rejected by Telegram (invalid/revoked) |
 | `5` | could not verify (network) |
 
-```bash
-python3 scripts/check_bot_token.py          # human output
-python3 scripts/check_bot_token.py --json   # machine output
-```
-
 Both entry points into polling enforce it — `scripts/run_bot.sh` **and** a direct
 `python3 -m app.bot_main` — so there is no bypass. Override only for a
 deliberately-shared token with `SKIP_TOKEN_CHECK=1`.
 
-### Full sequence
+---
+
+## Full sequence
 
 ```bash
 cd ~/hermes_bot_miniapp
@@ -518,20 +488,27 @@ bash scripts/run_bot.sh
   `*.trycloudflare.com` hostname and rewrites `TELEGRAM_WEBAPP_URL` in `.env`.
   Re-run `register_miniapp.sh` after a restart, or set up a *named* tunnel with
   a stable hostname for anything long-lived.
+
 - **The tunnel needs ~30–90 s to register.** Hitting the URL too early returns
-  **HTTP 530 (Argo Tunnel error)**. `start.sh` polls until `/health` returns
+  **HTTP 530 (Argo Tunnel error).** `start.sh` polls until `/health` returns
   `200` before reporting success — don't shortcut this.
+
 - **`http://127.0.0.1` is not reachable by Telegram.** The Mini App must be
   served over public HTTPS; that is what the tunnel provides.
+
 - **DNS negative caching.** A freshly created `trycloudflare.com` name can
   return NXDOMAIN locally for up to the 300 s TTL while it already resolves
   globally. Verify with `--resolve <host>:443:<ip>` if a local lookup fails.
+
 - **Termux:Boot** is a separate F-Droid app; `install_boot.sh` writes the hook
   but you must open that app once to grant the boot permission.
+
 - `termux-wake-lock` is held while serving so Android does not suspend the
   processes; `stop.sh` releases it.
 
-### Verified deployment state
+---
+
+## Verified deployment state
 
 ```
 ✓ server running          127.0.0.1:8080
@@ -546,3 +523,73 @@ bash scripts/run_bot.sh
 Public routes are read-only. There is still no send/sign/broadcast endpoint
 (404), so a publicly reachable URL exposes no ability to move funds.
 
+---
+
+# 🎯 KriptoK Creator Challenge Participation (Nov 2026)
+
+## Challenge Overview
+- **Platform**: Superteam Earn · KriptoK
+- **Reward**: 200 USDC across 10 winners
+- **Deadline**: 2 Dec 20:59:59 UTC (submission), 9 Dec 20:59:59 UTC (winner announcement)
+- **Entry Fee**: **No purchase, deposit, or trade required** (explicit in rules)
+- **Format**: X thread (8 tweets) or article/video
+
+## My Submission (8-Tweet Thread)
+
+| Tweet | Character Count | Key Focus |
+|-------|----------------|-----------|
+| 1 | 220 | Self-custody: keys on device, not custodial |
+| 2 | 234 | What ships today: perps, tokenized stocks (Tesla/NVDA/AAPL), 13 chains, DeFi vaults, collectible packs |
+| 3 | 236 | **League formula**: net P&L + ROI + eligible volume (consistency > degen luck) |
+| 4 | 242 | Social layer: follow rated traders, see P&L/ROI/win rate/open positions |
+| 5 | 186 | 1v1 or group battles (4/8 participants, same amount, best result wins) |
+| 6 | 231 | Built by Sanal Kasam Teknoloji A.Ş., Halborn white-box audit, self-custody + real audit = rare combo |
+| 7 | 213 | Honest caveat: self-custody = keys your responsibility; perps still leverage; compete with size you can lose |
+| 8 | 162 | Full breakdown: kriptok.io; reply with your angle: "compare notes than compete blind" |
+
+## Judging Criteria (40/30/20/10)
+- **40% Engagement**: conversations created, audience connection, meaningful contributions to KriptoK community on X and Telegram
+- **30% Usefulness**: how well content introduces product, explains use case, helps discover KriptoK
+- **20% Product Accuracy**: how well content represents product and its features *(leading with verifiable specifics avoids penalties)*
+- **10% Originality**: own perspective, storytelling, execution
+
+## My Verifiable Specifics (20% Accuracy Edge)
+- ✅ **Self-custody**: keys stay on device (not custodial)
+- ✅ **Halborn audit**: white-box security audit completed
+- ✅ **13 chains**: multi-chain support confirmed
+- ✅ **League scoring**: net P&L + ROI + eligible volume formula
+- ✅ **No purchase/deposit/trade**: explicitly prohibited clause
+
+## Entry Mechanics (from listing page)
+- Must tag @KriptoK in product content
+- Must tag @KriptoKLeague when covering the League
+- Follow @KriptoK and @KriptoKLeague on X (required for eligibility)
+- Join KriptoK Telegram community @KriptoKOfficial (required for eligibility)
+- Submit content link through Superteam Earn before deadline
+- Create in English or include English subtitles
+
+## My Telegram & X Status
+- ✅ Already following @KriptoK and @KriptoKLeague on X
+- ✅ Already joined KriptoK Telegram @KriptoKOfficial
+- ✅ X: @EvYEmyStarhill
+- 📅 Deadline reminder: Cron job created (cf4dbc777ca0) → notifies on Dec 2, 20:59:59 UTC
+- 📦 GitHub: github.com/evelinazvaigznekalne-bit
+
+## Content Angle (My Thread)
+Focus on **self-custody advantage** + **League formula explanation** + **honest caveat** about leverage responsibility. Leading with verified specifics avoids the 20% accuracy penalty that trips up most entries.
+
+## Next Steps After Submission
+1. Engage with replies to my X thread (boosts 40% engagement criterion)
+2. Share thread in KriptoK Telegram @KriptoKOfficial
+3. Reply to other creators' intros in Telegram
+4. Submit final link through Superteam Earn before 2 Dec 20:59:59 UTC
+5. Monitor: winner announcement 9 Dec 20:59:59 UTC
+
+## Related GitHub Repos
+- `crypto-earn-opportunities` — Collection of free crypto earn opportunities (no funds required)
+- `hermes_bot_miniapp` — Read-only wallet inspection, signature-based ownership verification
+- `open-crypto-puzzles` — Solvable crypto treasure puzzles via phone sweeps
+
+---
+
+*This challenge aligns with my broader research: public crypto treasure puzzles, bug bounty programs, and Solidity upgradeability proxy contract analysis. All content created is read-only — no trading, deposits, or purchases required.*

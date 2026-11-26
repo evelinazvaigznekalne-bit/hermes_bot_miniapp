@@ -47,7 +47,6 @@ while true; do
     log "starting supervisor"
     bash "$PROJECT_DIR/scripts/supervisor.sh" &
     SUPERVISOR_PID=$!
-    echo "$SUPERVISOR_PID" > "$RUN_DIR/supervisor.pid"
 
     # Wait for supervisor to exit
     wait "$SUPERVISOR_PID" 2>/dev/null

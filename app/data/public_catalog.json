@@ -1,0 +1,1594 @@
+{
+  "schema_version": 1,
+  "source": "open-crypto-puzzles (sanitized public catalog)",
+  "record_count": 49,
+  "puzzles": [
+    {
+      "slug": "aoi-nakamoto-quizchain-0-854btc",
+      "title": "Aoi Nakamoto Quizchain",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "14zMkTgaVXJcxdh4JdWi29MLRR44iUSG9W",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "Real Big Block, stage 2",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "13Cv6SXUnzGDT8JHqzzJ8xMPtsSdhJA4wd",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "Quizchain2 Block 76",
+          "verified_state": "swept"
+        },
+        {
+          "address": "19TbyN5KCg1Lg7qHwezifsLVcdSa2Rj5KN",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "Real Big Block, stage 1 (certification reference, solved by a third party in 2019, not part of the live prize)",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 0.777,
+        "asset": "BTC",
+        "usd_estimate": 48951,
+        "usd_snapshot": "2026-08-16",
+        "note": "Block 76 (0.077 BTC) was solved and swept by a reader on 2026-08-17; only Real Big Block (0.777 BTC) remains open"
+      }
+    },
+    {
+      "slug": "ballet-bobby-lee-2btc-cards",
+      "title": "Ballet / Bobby Lee: Take Bobby's Bitcoin",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "bip38",
+        "physical-object"
+      ],
+      "addresses": [
+        {
+          "address": "1JxWyNrkgYvgsHu8hVQZqTXEB9RftRGP5m",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "AA009926",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "1QGtbKxx6FKDD66LwnrzHCAHmyZ7mDHqC4",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "AA012381",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "1LL6Xy92LwGDRfQP9fBU7f1477cEKctr7c",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "AA007448 (oracle, solved by a third party in 2020, not part of the live prize)",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 2.00007358,
+        "asset": "BTC",
+        "usd_estimate": 126005,
+        "usd_snapshot": "2026-08-16",
+        "note": "two independent cards, 1.00003481 BTC (AA009926) and 1.00003877 BTC (AA012381); a third card, AA007448, was solved and swept by a third party in 2020 and is not part of the live prize"
+      }
+    },
+    {
+      "slug": "bitaps-shamir-challenge-1btc",
+      "title": "Bitaps Shamir Secret Sharing Challenge",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "shamir",
+        "bip39-seed"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qyjwa0tf0en4x09magpuwmt2smpsrlaxwn85lh6",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1.00016775,
+        "asset": "BTC",
+        "usd_estimate": 63011,
+        "usd_snapshot": "2026-08-16",
+        "note": "single P2WPKH escrow, funded across 5 transactions ending 2022-10"
+      }
+    },
+    {
+      "slug": "blm-brave-new-world-0-2btc",
+      "title": "BLM Collage: Welcome to the Brave New World",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "image-stego",
+        "word-selection",
+        "bip39-seed",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "1KfZGvwZxsvSmemoCmEV75uqcNzYBHjkHZ",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 20107284,
+        "asset": "sats",
+        "usd_estimate": 12668,
+        "usd_snapshot": "2026-08-16",
+        "note": "0.20107284 BTC, funded 2020-05-10 in 5 transactions, before the puzzle post"
+      }
+    },
+    {
+      "slug": "gsmg-io-5btc-puzzle",
+      "title": "GSMG.io Puzzle",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "text-cipher",
+        "pixel-code",
+        "web-tree",
+        "raw-private-key"
+      ],
+      "addresses": [
+        {
+          "address": "1GSMG1JC9wtdSwfwApgj2xcmJPAwx7prBe",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "prize address (small blob gate)",
+          "verified_state": "partially-spent"
+        },
+        {
+          "address": "17ucy1K9ZUAaoY6JVtM932W9jUp5LXfyHa",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "halving split-off, creator controlled; not counted as prize (the Dualite-blob reading is unconfirmed)",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1.2563451,
+        "asset": "BTC",
+        "usd_estimate": 79150,
+        "usd_snapshot": "2026-08-16",
+        "note": "the balance of the prize address 1GSMG1JC9wtdSwfwApgj2xcmJPAwx7prBe at the 2026-08-16 snapshot (1.25635374 BTC on 2026-09-03, the difference is third-party dust). The creator announced in April 2019 that the reward halves at every Bitcoin halving, and it did: 5 BTC funded 2019-04-13, 2.5 BTC moved out in block 630001 (2020-05-11) and 1.25 BTC on 2024-04-24 to 17ucy1K9ZUAaoY6JVtM932W9jUp5LXfyHa, which has never spent and has no published payout path. Those 3.7505531 BTC are listed as an address below but not counted as prize; the reading that the Dualite blob gates them is unconfirmed. Correction contributed by Y0lan in issue #15 (2026-09-02), verified on chain 2026-09-03"
+      }
+    },
+    {
+      "slug": "guntis-vitolins-metamask-8-6eth",
+      "title": "Guntis Vitolins: 10 ETH Challenge",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "big",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection",
+        "video-series"
+      ],
+      "addresses": [
+        {
+          "address": "0x9C2F44EFAd0c1E852a09dF9939e6DaF061140CaF",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 8.612541554256945,
+        "asset": "ETH",
+        "usd_estimate": 16192,
+        "usd_snapshot": "2026-08-16",
+        "note": "wallet funded with 10 ETH on 2020-02-12; the author has withdrawn from it 7 times since 2021-05, most recently 2024-06-04, totaling approximately 1.377 ETH; he still holds and periodically uses this private key, so this is not a frozen escrow"
+      }
+    },
+    {
+      "slug": "peter-todd-hash-collision-bounties-0-59btc",
+      "title": "Peter Todd Hash Collision Bounties",
+      "chain": "bitcoin",
+      "status": "watch",
+      "tier": "big",
+      "puzzle_type": [
+        "hash-collision"
+      ],
+      "addresses": [
+        {
+          "address": "35Snmmy3uhaer2gTboc81ayCip4m9DT4ko",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "SHA-256",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "3KyiQEGqqdb4nqfhUzGKN6KPhXmQsLNpay",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "RIPEMD-160",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "39VXyuoc6SXYKp9TcAhoiN1mb4ns6z3Yu6",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "HASH160 (RIPEMD160(SHA256()))",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "3DUQQvz4t57Jy7jxE86kyFcNpKtURNf1VW",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "HASH256 (SHA256(SHA256()))",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "37k7toV1Nv4DfmQbmZ8KuZDQCYK9x5KpzP",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "SHA-1 (reference sibling, claimed 2023-02-22, not part of the live prize)",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 0.59364885,
+        "asset": "BTC",
+        "usd_estimate": 37400,
+        "usd_snapshot": "2026-08-16",
+        "note": "combined across 4 live P2SH scripts (SHA-256, RIPEMD-160, HASH160, HASH256); a 5th sibling (SHA-1) was claimed in 2023 and is not part of this total"
+      }
+    },
+    {
+      "slug": "ah-white-walking-banks-800ksats",
+      "title": "AH White: Walking Banks",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "book",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qxy4tf0s4n7x9w24rawf9qsxh2hyljrmvyrhwzt",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "account 0, index 0",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "bc1q4qc24xk5cehc4t7vr264zldsms2kmxf86jqjau",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "account 0, index 1",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 800000,
+        "asset": "sats",
+        "usd_estimate": 504,
+        "usd_snapshot": "2026-08-16",
+        "note": "split across two P2WPKH addresses derived from one published xpub, funded 2024-09-05"
+      }
+    },
+    {
+      "slug": "arweave-puzzle-10-500ar",
+      "title": "Arweave Puzzle #10",
+      "chain": "arweave",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "word-selection",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "bkjJGw3NLxs8OAyRxgTL-QFpiB3lBJqZ76kDhWdB-Rs",
+          "chain": "arweave",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 500.02225493,
+        "asset": "AR",
+        "usd_estimate": 905,
+        "usd_snapshot": "2026-08-16",
+        "note": ""
+      }
+    },
+    {
+      "slug": "arweave-puzzle-11-1eth",
+      "title": "Arweave Puzzle #11",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "image-stego",
+        "pixel-code",
+        "raw-private-key"
+      ],
+      "addresses": [
+        {
+          "address": "0xFF2142E98E09b5344994F9bEB9C56C95506B9F17",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1,
+        "asset": "ETH",
+        "usd_estimate": 1880,
+        "usd_snapshot": "2026-08-16",
+        "note": "1 ETH, address held as a plain EOA, never spent from since funding"
+      }
+    },
+    {
+      "slug": "arweave-puzzle-12-400ar",
+      "title": "Arweave Puzzle Weave #12",
+      "chain": "arweave",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "word-selection",
+        "geometry",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "XRGEfkMbCMHeTY9mZI9Lh6hf8EmA8RstmBFUjDm40fg",
+          "chain": "arweave",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 400.00248121,
+        "asset": "AR",
+        "usd_estimate": 724,
+        "usd_snapshot": "2026-08-16",
+        "note": "the small amount above 400 AR is unsolicited dust received after the 2020-04-14 funding, not a partial withdrawal"
+      }
+    },
+    {
+      "slug": "arweave-puzzle-3-1000ar",
+      "title": "Arweave Puzzle #3",
+      "chain": "arweave",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "word-selection",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "wHP6OPG5GMF5dedo_CD8AAy6x8La-gfI5b5pk65Tx_0",
+          "chain": "arweave",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1000.165838006237,
+        "asset": "AR",
+        "usd_estimate": 1810,
+        "usd_snapshot": "2026-08-16",
+        "note": "balance drifts slightly above the original funding from unsolicited dust deposits over the years"
+      }
+    },
+    {
+      "slug": "corey-phillips-kitten-passphrase-1msats",
+      "title": "Corey Phillips: Kitten Passphrase Puzzle",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "brainwallet"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qcyrndzgy036f6ax370g8zyvlw86ulawgt0246r",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "bc1q57euh23y3qs2f9d5mtwpax5lqecfvrdkqce82a",
+          "chain": "bitcoin",
+          "role": "decoy",
+          "label": "sister (empty passphrase, oracle calibration only, not a target)",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 1001900,
+        "asset": "sats",
+        "usd_estimate": 631,
+        "usd_snapshot": "2026-08-16",
+        "note": "2 funding UTXOs summing to 1,001,900 sats, 0 spent as of 2026-08-16"
+      }
+    },
+    {
+      "slug": "fe-lang-bountiful-compiler-bounty-1eth",
+      "title": "Bountiful: the Fe compiler bug bounty",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "smart-contract",
+        "timelock"
+      ],
+      "addresses": [
+        {
+          "address": "0x71fB6afcD98c5BD611712ad4b8D314EF729aa69D",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "BountyRegistry, round 3",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "0x046a3a4968282BaA7ad6291723873C8275434623",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "Game",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0xE959e7ecA1afCa6cf2Bf8b07e25Da355b6C8E8c7",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "Game2D",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0xfb5423aDfBAC65ac675845Bb4FEBf8aeC128272E",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "GameEnum",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0x5E987b6aADD4DFC2236D21edE6D07feb04350b06",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "GameBitboard",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0x86B7AEce1503242fED29E593FAEde3b7b00a5a1D",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "GameMonadic",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0x3dF9789634995546B0126bC28B9F9FcBCB129F18",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "GameNested",
+          "verified_state": "zero-balance-contract"
+        },
+        {
+          "address": "0x85b4d0B32b8a285111c244E52524B642f1A5ccFE",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "GameTrait",
+          "verified_state": "zero-balance-contract"
+        }
+      ],
+      "prize": {
+        "amount": 1,
+        "asset": "ETH",
+        "usd_estimate": 1880,
+        "usd_snapshot": "2026-08-16",
+        "note": "the registry holds 1 ETH and each of the 7 registered challenges carries a 0.25 ETH prize, so the pot pays the first 4 claims and the 5th would revert; the 1 ETH balance, not the 1.75 ETH nominal total, is what the chain can pay today"
+      }
+    },
+    {
+      "slug": "ftpk-season-2-300usdt",
+      "title": "FTPK Season 2: Never-Ending",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "0xb5fe4f1b6cb2bbe6a327f8c68f370da7df18b2dc",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 305.930218,
+        "asset": "USDT",
+        "usd_estimate": 306,
+        "usd_snapshot": "2026-08-16",
+        "note": "ERC-20 USDT; the escrow's native ETH balance is 0, the prize is entirely the token balance"
+      }
+    },
+    {
+      "slug": "keir-finlow-bates-blockchain-book-600ksats",
+      "title": "Keir Finlow-Bates: Move Over Brokers Treasure Hunt",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "book",
+        "brainwallet",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "14aFhno96fkt7knLWMDQ4j8yh8v5hBF4n1",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_easy_1",
+          "verified_state": "swept"
+        },
+        {
+          "address": "14utGQn5GdfPvUrHNLAwTmmP99QpXm9mg6",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_easy_2",
+          "verified_state": "swept"
+        },
+        {
+          "address": "1QFafw3weoWTRQhiLafRw2eyWbVmES6wfJ",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_medium_s",
+          "verified_state": "swept"
+        },
+        {
+          "address": "17Y9czcbcCz433QXsy1SGQjwLb27BBtLLZ",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_medium",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "181rPpfdUGFg4fVEdhDZEfDbBSqgigtoZR",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_hard_1",
+          "verified_state": "swept"
+        },
+        {
+          "address": "161YgNX2NrCzGunWvoV1hN3DuzWeuovBK3",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_hard_2",
+          "verified_state": "swept"
+        },
+        {
+          "address": "1KZei2D5yz3UJ59LvXsC1Y9y4ktSgcnVwz",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_veryhard_s",
+          "verified_state": "swept"
+        },
+        {
+          "address": "1DZ5NbUwDgxeJkKhQLgYcUUX36PtYso1pm",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "EN_veryhard",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "1MEstvLAzc5DzJtvx7uyvKNNUCPN3ofWMK",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "IT_easy",
+          "verified_state": "swept"
+        },
+        {
+          "address": "1Q78hDeaHXQbuCSQxG1uPAc4V3jsuVUG9r",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "IT_medium",
+          "verified_state": "swept"
+        },
+        {
+          "address": "1QExGvuieS9MvuKC3R1qjp6jGTVcqisTDj",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "IT_hard",
+          "verified_state": "swept"
+        },
+        {
+          "address": "19kkawFcg2U2s6vq368MXD7FJU9JZvRrjA",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "IT_veryhard",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "bc1qax0hsnwnxl7393awtc3hsy0ftm6tg4tyk2nfja",
+          "chain": "bitcoin",
+          "role": "payout",
+          "label": "my wallet (destination of all 4 payouts)",
+          "verified_state": "unknown"
+        }
+      ],
+      "prize": {
+        "amount": 600000,
+        "asset": "sats",
+        "usd_estimate": 378,
+        "usd_snapshot": "2026-08-16",
+        "note": "3 of 12 lots still open, 200,000 sats each; 9 lots already solved and swept (4 by me, 5 by the community before I started; I have since recovered the answers of 3 of those 5)"
+      }
+    },
+    {
+      "slug": "logicbeach-powerful-moss-0-54eth",
+      "title": "LogicBeach: Powerful Moss",
+      "chain": "base",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "image-stego",
+        "bip39-seed",
+        "word-selection",
+        "smart-contract"
+      ],
+      "addresses": [
+        {
+          "address": "0x831102C7eb86f9EC8f79dF891bDeA187D54344Dd",
+          "chain": "base",
+          "role": "escrow",
+          "label": "prize contract",
+          "verified_state": "contract-holds-funds"
+        }
+      ],
+      "prize": {
+        "amount": 0.55,
+        "asset": "ETH",
+        "usd_estimate": 1034,
+        "usd_snapshot": "2026-08-16",
+        "note": "the pot grows over time toward the contract's full balance; it was 0.54 ETH at the private research folder's prior check and 0.55 ETH on 2026-08-16, consistent with the contract's own time-based ramp, not a partial claim"
+      }
+    },
+    {
+      "slug": "path-to-greatness-treasure-hunt-3ltc",
+      "title": "Path to Greatness: Treasure Hunt",
+      "chain": "litecoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "raw-private-key",
+        "image-stego",
+        "audio",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "LUtL7qnm3gzxKjHcfVLSjydqhhinTVmTmS",
+          "chain": "litecoin",
+          "role": "escrow",
+          "label": "prize",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 3.02608794,
+        "asset": "LTC",
+        "usd_estimate": 163,
+        "usd_snapshot": "2026-08-16",
+        "note": "302,608,794 litoshis. The pot is topped up by the public: the site invites donations straight into the prize address, which is why there are 8 incoming transactions. LTC was $54.17 when I read the price on 2026-09-12; the repository snapshot price of $54 is used here."
+      }
+    },
+    {
+      "slug": "pindar-van-arman-cryptoartgan-nft",
+      "title": "Pindar Van Arman: cryptoArtGAN Act 1 Puzzle",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "0x18f87ec9c527aba1db44f715456bf28b0dae478d",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1,
+        "asset": "NFT",
+        "usd_estimate": null,
+        "usd_snapshot": "2026-08-16",
+        "note": "1 ERC-1155 NFT, \"Magic Internet moneyGAN\" (445/512); no market value recorded for this specific piece"
+      }
+    },
+    {
+      "slug": "rushwallet-contest-30-1msats",
+      "title": "RushWallet Contest #30",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "brainwallet",
+        "audio"
+      ],
+      "addresses": [
+        {
+          "address": "13Q8hJqagtd77ojTJcEZPjTz2sBFSsYxyj",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "partially-spent"
+        }
+      ],
+      "prize": {
+        "amount": 1000000,
+        "asset": "sats",
+        "usd_estimate": 630,
+        "usd_snapshot": "2026-08-16",
+        "note": "the escrow was funded 101,000,000 sats total: 100,000,000 sats on 2014-09-22 later returned to its own sender on 2015-03-25, and a separate 1,000,000 sats on 2015-04-24 that remains unspent; the 1,000,000 sats figure is the live prize"
+      }
+    },
+    {
+      "slug": "school-of-bitcoin-1msats",
+      "title": "School of Bitcoin: 1 Million Sats In This Image",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "image-stego",
+        "password-pages"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qcsdfkaqgy9ux668vmzflzqsyg0qtspncymt5ed",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1000000,
+        "asset": "sats",
+        "usd_estimate": 630,
+        "usd_snapshot": "2026-08-16",
+        "note": "single funding transaction, 0.01 BTC"
+      }
+    },
+    {
+      "slug": "smith-lyle-moore-hunt-2-0-032btc",
+      "title": "Smith, Lyle & Moore Hunt #2: Glimmer",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "password-pages",
+        "web-tree"
+      ],
+      "addresses": [
+        {
+          "address": "bc1q0akdjvrc2csau2n3gyxa3xcq0fss852x997m9y",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        },
+        {
+          "address": "bc1qax0hsnwnxl7393awtc3hsy0ftm6tg4tyk2nfja",
+          "chain": "bitcoin",
+          "role": "payout",
+          "label": "my wallet (destination if solved)",
+          "verified_state": "unknown"
+        }
+      ],
+      "prize": {
+        "amount": 0.031777,
+        "asset": "BTC",
+        "usd_estimate": 2002,
+        "usd_snapshot": "2026-08-16",
+        "note": "3,177,700 sats, funded in a single transaction on 2022-07-29, unspent"
+      }
+    },
+    {
+      "slug": "teikhos-bipedaljoe-solver-bounties-2eth",
+      "title": "TeikhosBounty: Johan Nygren's Proof-of-Public-Key Puzzles",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "smart-contract",
+        "timelock"
+      ],
+      "addresses": [
+        {
+          "address": "0x735ba26f91e1275fa4b504649b19ef74739fe7e7",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "735B",
+          "verified_state": "swept"
+        },
+        {
+          "address": "0x17e5e0910b9185b0ede564dcbf074ca910ad56a4",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "C1",
+          "verified_state": "contract-holds-funds"
+        },
+        {
+          "address": "0xd7c6d542f3dcdceda845112b8fd567b8f8655805",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "C2",
+          "verified_state": "contract-holds-funds"
+        },
+        {
+          "address": "0x973c2178b09225d1de3ab037d40b3f24af696255",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "9732",
+          "verified_state": "contract-holds-funds"
+        },
+        {
+          "address": "0xaec7e8c221c3fd24e75c996e32289235fd899ebf",
+          "chain": "ethereum",
+          "role": "contract",
+          "label": "AEC7",
+          "verified_state": "contract-holds-funds"
+        },
+        {
+          "address": "0x83e4b2a5A464bDfCD83057Ac08447f533A595156",
+          "chain": "ethereum",
+          "role": "payout",
+          "label": "my wallet (735B payout destination)",
+          "verified_state": "unknown"
+        }
+      ],
+      "prize": {
+        "amount": 2.000006,
+        "asset": "ETH",
+        "usd_estimate": 3760,
+        "usd_snapshot": "2026-08-16",
+        "note": "sum of the 3 open contracts: C1 1.000002 ETH, C2 0.500002 ETH, 9732 0.500002 ETH; a 4th contract, AEC7, holds 1.000012 ETH with no payout path for anyone; a 5th, 735B, was solved by me for 0.5 ETH and is now drained"
+      }
+    },
+    {
+      "slug": "wealth-in-poetry-0-03btc",
+      "title": "Trithemius: Wealth in Poetry",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "bip39-seed",
+        "text-cipher",
+        "brainwallet"
+      ],
+      "addresses": [
+        {
+          "address": "1K4ezpLybootYF23TM4a8Y4NyP7auysnRo",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 3124630,
+        "asset": "sats",
+        "usd_estimate": 1969,
+        "usd_snapshot": "2026-08-16",
+        "note": "0.0312463 BTC, 2 funding transactions, exact dates not recorded"
+      }
+    },
+    {
+      "slug": "zden-haluska-halv-312ksats",
+      "title": "Zden Level HALV",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "mid",
+      "puzzle_type": [
+        "geometry",
+        "raw-private-key"
+      ],
+      "addresses": [
+        {
+          "address": "1crypto24HCr178iMcKd5iUi5D4rsg1nK",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 312500,
+        "asset": "sats",
+        "usd_estimate": 197,
+        "usd_snapshot": "2026-08-16",
+        "note": ""
+      }
+    },
+    {
+      "slug": "crypto-puzzles-2018-puzzle-2-0-05eth",
+      "title": "Crypto Puzzles 2018: Puzzle #2",
+      "chain": "ethereum",
+      "status": "open",
+      "tier": "small",
+      "puzzle_type": [
+        "raw-private-key",
+        "image-stego",
+        "video-series"
+      ],
+      "addresses": [
+        {
+          "address": "0x1fa8Be9De5bBFE047C72dB8E8E3257128F7661ad",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 0.05,
+        "asset": "ETH",
+        "usd_estimate": 94,
+        "usd_snapshot": "2026-08-16",
+        "note": "single externally-owned account, never signed a transaction (nonce 0); that this address is Puzzle #2's escrow is a strong inference from the funder and amount matching Puzzle #1, not stated directly by the author"
+      }
+    },
+    {
+      "slug": "exitonly-challenge-14-30ksats",
+      "title": "Exitonly Bitcoin Challenge 14",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "small",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "bc1q5rjy2cdfy4n4dkk4r6pxtwqlm8tgjcc2dj0ee9",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 30000,
+        "asset": "sats",
+        "usd_estimate": 18.9,
+        "usd_snapshot": "2026-08-16",
+        "note": "single P2WPKH escrow, one funding transaction"
+      }
+    },
+    {
+      "slug": "genesis-block-wallet-puzzle-142ksats",
+      "title": "Genesis Block Wallet Puzzle",
+      "chain": "bitcoin",
+      "status": "open",
+      "tier": "small",
+      "puzzle_type": [
+        "multisig",
+        "raw-private-key"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qfkhx02v89u2qyyyljeczw6hu9sr437y44t7ae5yf09thrdukfqesnjg2wj",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main (P2WSH, witness program 4dae67a9872f1402109f9670276afc2c0758f895aafddcd089795771b7964833)",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 168779,
+        "asset": "sats",
+        "usd_estimate": 106,
+        "usd_snapshot": "2026-08-16",
+        "note": "24 P2WSH outputs to one witness script; the jackpot grows because the author relays every paid question into the escrow (125,779 sats on 2026-08-24, 142,779 on 2026-08-29, 168,779 on 2026-09-12)"
+      }
+    },
+    {
+      "slug": "andy-bauch-new-money-cog-428ksats",
+      "title": "Andy Bauch: New Money, COG",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "pixel-code",
+        "physical-object"
+      ],
+      "addresses": [
+        {
+          "address": "1HLodS8H2GoWbnBXWcz7EkY773dKdD4JEv",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 428206,
+        "asset": "sats",
+        "usd_estimate": 270,
+        "usd_snapshot": "2026-08-16",
+        "note": "the escrow received 527,872 sats on 2017-07-01, that amount left on 2017-12-30 and was replaced by the same funder the next day, 2017-12-31, with the 428,206 sats that remains unspent today"
+      }
+    },
+    {
+      "slug": "bc1q21-timelock-challenge-l5-100ksats",
+      "title": "bc1q21 Time-Lock Challenge, Level 5",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "timelock"
+      ],
+      "addresses": [
+        {
+          "address": "37xcRXcYRht9VZJeLYWegDRC2fjX5XVnAp",
+          "chain": "bitcoin",
+          "role": "contract",
+          "label": "P2SH CLTV time lock holding the prize",
+          "verified_state": "swept"
+        },
+        {
+          "address": "bc1q3pwpgp7dkhtzj6qya39l8tu6dgdarv9gr9kx0r",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "funding-oracle address, BIP84 m/84'/0'/0'/0/0 of the recovery phrase",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 100000,
+        "asset": "sats",
+        "usd_estimate": 63,
+        "usd_snapshot": "2026-08-16",
+        "note": "100,000 sats locked in the P2SH time lock; I received 99,604 sats after the 396 sat network fee"
+      }
+    },
+    {
+      "slug": "bitcoin-movie-enigma-100ksats",
+      "title": "Bitcoin Movie Enigma",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "text-cipher",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "bc1q94ecsn0qk8lap2gefrycnms3ruepy889z969a6",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 100000,
+        "asset": "sats",
+        "usd_estimate": 63,
+        "usd_snapshot": "2026-08-16",
+        "note": "single P2WPKH escrow, one funding transaction"
+      }
+    },
+    {
+      "slug": "dug-student-treasure-hunt-63ksats",
+      "title": "Dug's Student Treasure Hunt (2025 edition)",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qych2me6h85j38s3xmfwdkcvpqakpld3yr2y5ss",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "index 0, m/84'/0'/0'/0/0",
+          "verified_state": "swept"
+        },
+        {
+          "address": "bc1qphfklk568cf93267yetpngqsz0mthw4z4x2q69",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "index 1, m/84'/0'/0'/0/1, the one I solved",
+          "verified_state": "swept"
+        },
+        {
+          "address": "bc1qnclravnmv7vta9fhnp44hu3y85z3tfgz0n33wl",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "index 2, m/84'/0'/0'/0/2",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 63216,
+        "asset": "sats",
+        "usd_estimate": 40,
+        "usd_snapshot": "2026-08-16",
+        "note": "the portion I recovered (index 1 of 3); a third party had already swept the larger index 0 plus index 2 portion, 95,792 sats, five weeks earlier"
+      }
+    },
+    {
+      "slug": "ftpk-season-4-166usdc",
+      "title": "FTPK Season 4: Something in Common",
+      "chain": "ethereum",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "0xa468335485cE853F21A44451755bd88364e9d618",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 166.0,
+        "asset": "USDC",
+        "usd_estimate": 166,
+        "usd_snapshot": "2026-08-16",
+        "note": "the author tops up this prize over time; it started at 150 USDC and has grown since, plus a small native ETH gas preload for the eventual winner"
+      }
+    },
+    {
+      "slug": "keysa-crack-the-seed-369ksats",
+      "title": "Keysa: Crack the Seed Game",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qcv84707v4sglaj306qezkcrun4eejh77k8cyjr",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 369369,
+        "asset": "sats",
+        "usd_estimate": 233,
+        "usd_snapshot": "2026-08-16",
+        "note": "the author never published the escrow address; I found it by matching the announced amount, 369,369 sats, as a near-unique fingerprint in a full blockchain balance dump, then corroborated it by script type (v0_p2wpkh, matching BIP84) and by funding time (2 minutes 28 seconds after the announcement post)"
+      }
+    },
+    {
+      "slug": "luckylurker-seed-riddles-80ksats",
+      "title": "LuckyLurker Seed Riddles",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "word-selection",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "bc1q32e3dxcd0n2tlzdmchraf2057d0ax4xdwrk3jq",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 80000,
+        "asset": "sats",
+        "usd_estimate": 50,
+        "usd_snapshot": "2026-08-16",
+        "note": "single P2WPKH escrow, 2 funding transactions of 40,000 sats each"
+      }
+    },
+    {
+      "slug": "veteranhodl-hunting-time-420ksats",
+      "title": "VeteranHODL: Hunting Time",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "book",
+        "word-selection"
+      ],
+      "addresses": [
+        {
+          "address": "bc1qhzy6j4amw26z7e694mgfr7kvzl7xteu54f0a85",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 420000,
+        "asset": "sats",
+        "usd_estimate": 265,
+        "usd_snapshot": "2026-08-16",
+        "note": "funded in two tranches, 210000 sats on 2023-07-22 and 210000 sats on 2026-07-31, the day before the author's wallet-type announcement post"
+      }
+    },
+    {
+      "slug": "wonderabbit-prometheus-1msats",
+      "title": "Wonderabbit: Prometheus",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "bip39-seed",
+        "physical-object",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "bc1q3nxe7436s3mlrkyrg3uv2a40yt5dcmfu7tggx5",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 1031123,
+        "asset": "sats",
+        "usd_estimate": 650,
+        "usd_snapshot": "2026-08-16",
+        "note": "current balance after a documented 21000-sats self-test transaction that the author sent to and from themselves before funding the prize; not the prize moving"
+      }
+    },
+    {
+      "slug": "zden-haluska-lvl5-555ksats",
+      "title": "Zden Cryptopuzzle LVL.5",
+      "chain": "bitcoin",
+      "status": "solved",
+      "tier": "solved",
+      "puzzle_type": [
+        "geometry",
+        "raw-private-key"
+      ],
+      "addresses": [
+        {
+          "address": "1cryptoGeCRiTzVgxBQcKFFjSVydN1GW7",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 555550,
+        "asset": "sats",
+        "usd_estimate": 350,
+        "usd_snapshot": "2026-08-16",
+        "note": ""
+      }
+    },
+    {
+      "slug": "commander-u-puzzle-8-5btc",
+      "title": "Commander U Riddle for 8.5 BTC",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "puzzle_type": [
+        "raw-private-key",
+        "text-cipher"
+      ],
+      "addresses": [
+        {
+          "address": "1KDUcZh5Z6H1of4Pwoy5ojJtkQxcQBHhnH",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "the announced prize address",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 8.50099081,
+        "asset": "BTC",
+        "usd_estimate": 535562,
+        "usd_snapshot": "2026-08-16",
+        "note": "8.5 BTC of this sits in a 2010 P2PK output, which mempool.space's address API does not index; it shows only the 99,081 sats held in 8 separate P2PKH outputs at the same address. Both readings are correct for what each indexer counts; the full total is spendable by the one private key that controls both, since the P2PKH outputs derive from the same uncompressed public key exposed by the P2PK output"
+      }
+    },
+    {
+      "slug": "objective-thune-licorne-0-21btc",
+      "title": "Objective Thune: Le Secret de la Licorne",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "puzzle_type": [
+        "multisig",
+        "physical-object",
+        "book"
+      ],
+      "addresses": [
+        {
+          "address": "3Jf995GANG4EmFBK89byNNyZdtB3ELXJsZ",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "main",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 0.21021,
+        "asset": "BTC",
+        "usd_estimate": 13243,
+        "usd_snapshot": "2026-08-16",
+        "note": "P2SH escrow, 2 funding transactions: 2020-01-03 (21,000,000 sats) and 2020-06-19 (21,000 sats)"
+      }
+    },
+    {
+      "slug": "onfo-forsyth-1btc",
+      "title": "ONFO / Dr. J.R. Forsyth Bitcoin Treasure Hunt",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "puzzle_type": [
+        "raw-private-key",
+        "video-series"
+      ],
+      "addresses": [
+        {
+          "address": "157dpLJgAAKugukKz8UwBHapM4idyZvnLc",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "label": "the announced prize wallet",
+          "verified_state": "funded-unspent"
+        }
+      ],
+      "prize": {
+        "amount": 1,
+        "asset": "BTC",
+        "usd_estimate": 63000,
+        "usd_snapshot": "2026-08-16",
+        "note": "reported in contemporaneous coverage as funded from the author's personal funds, not a company treasury"
+      }
+    },
+    {
+      "slug": "zodomo-11x11-pixel-puzzles-0-05eth",
+      "title": "Zodomo 11x11 Pixel Puzzles",
+      "chain": "ethereum",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "puzzle_type": [
+        "bip39-seed",
+        "pixel-code"
+      ],
+      "addresses": [
+        {
+          "address": "0x60a5431a138b0320641408694562f624f3c977a8",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "piece #869 escrow",
+          "verified_state": "swept"
+        },
+        {
+          "address": "0x9cc846fe9b75a4cee897f605b240dd0030fcd5a2",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "piece #930 escrow, encoding scheme not reconstructed",
+          "verified_state": "swept"
+        },
+        {
+          "address": "0xf5d45c9d798aedb754b1ed8660af3ea79178b765",
+          "chain": "ethereum",
+          "role": "escrow",
+          "label": "piece #993 escrow, reclaimed by the artist himself",
+          "verified_state": "swept"
+        },
+        {
+          "address": "0xa15585918e6ef74239246f4e1538acdf70b4743e",
+          "chain": "ethereum",
+          "role": "payout",
+          "label": "queengarden.eth, paid by hand as the 3rd solver's prize; a real person's active personal wallet, not an escrow for the active puzzle",
+          "verified_state": "unknown"
+        }
+      ],
+      "prize": {
+        "amount": 0.05,
+        "asset": "ETH",
+        "usd_estimate": 94,
+        "usd_snapshot": "2026-08-16",
+        "note": "the active (fourth) puzzle's nominal per-piece prize; no escrow currently holds it, see Why this is a dead end"
+      }
+    },
+    {
+      "slug": "aenigma-shards-nft",
+      "title": "Aenigma Shards (AESH NFT cryptogram)",
+      "chain": "ethereum",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [
+        {
+          "address": "0xC77C1CB208356d953439190a94f3C8a4c4f502A3",
+          "chain": "ethereum",
+          "role": "contract",
+          "verified_state": "unfunded"
+        }
+      ],
+      "prize": {
+        "amount": 34,
+        "asset": "ETH",
+        "usd_estimate": null,
+        "usd_snapshot": "2026-08-16",
+        "note": "promised across 10 contingent mint-count tiers; never materialized"
+      }
+    },
+    {
+      "slug": "bam-askabitcoiner-seed-cipher",
+      "title": "BAM x AskABitcoiner 42k Seed Cipher",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [
+        {
+          "address": "3Q1Qzs6EmTVE4JeUWRJVNxi9v5UJLN2mtc",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 42100,
+        "asset": "sats",
+        "usd_estimate": 27,
+        "usd_snapshot": "2026-08-16"
+      }
+    },
+    {
+      "slug": "demint-bitcoin-evangelism",
+      "title": "De Mint: Bitcoin Evangelism book puzzle",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [],
+      "prize": {
+        "amount": 3146386,
+        "asset": "sats",
+        "usd_estimate": 1982,
+        "usd_snapshot": "2026-08-16",
+        "note": "puzzle 1; a later puzzle 2 of 1,000,000 sats had no published escrow"
+      }
+    },
+    {
+      "slug": "game-of-satoshi-season-1",
+      "title": "The Game of Satoshi (Season 1)",
+      "chain": "none",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [],
+      "prize": {
+        "amount": 0.21,
+        "asset": "BTC",
+        "usd_estimate": 13230,
+        "usd_snapshot": "2026-08-16",
+        "note": "pool split among top 5000 players, paid by the organizer"
+      }
+    },
+    {
+      "slug": "phemex-dorian-nakamoto",
+      "title": "Phemex Dorian Nakamoto 2.1 BTC puzzle",
+      "chain": "bitcoin",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [
+        {
+          "address": "1h8BNZkhsPiu6EKazP19WkGxDw3jHf9aT",
+          "chain": "bitcoin",
+          "role": "escrow",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 1.1,
+        "asset": "BTC",
+        "usd_estimate": 69300,
+        "usd_snapshot": "2026-08-16",
+        "note": "on-chain portion; plus a 1 BTC off-chain exchange bonus"
+      }
+    },
+    {
+      "slug": "wares-wallets-solana",
+      "title": "Wares Wallets (Solana video series)",
+      "chain": "solana",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [
+        {
+          "address": "AayfnPQbmjR4nh9MY2EbgghVRLDVLnKDro3AJb9agCZq",
+          "chain": "solana",
+          "role": "escrow",
+          "verified_state": "swept"
+        }
+      ],
+      "prize": {
+        "amount": 0.1,
+        "asset": "SOL",
+        "usd_estimate": 15,
+        "usd_snapshot": "2026-08-16",
+        "note": "per puzzle; marketed higher than the real value"
+      }
+    },
+    {
+      "slug": "zk-guess-chainhackers-31",
+      "title": "ZK Guess #31 (chainhackers, Base)",
+      "chain": "base",
+      "status": "dead-end",
+      "tier": "dead-end",
+      "addresses": [
+        {
+          "address": "0x6F890B08fa4312135E1b4CF03929f8e389A866B4",
+          "chain": "base",
+          "role": "contract",
+          "verified_state": "contract-holds-funds"
+        }
+      ],
+      "prize": {
+        "amount": 0.0025,
+        "asset": "ETH",
+        "usd_estimate": 5,
+        "usd_snapshot": "2026-08-16"
+      }
+    }
+  ]
+}

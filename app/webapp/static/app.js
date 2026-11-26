@@ -277,15 +277,31 @@
     }
   }
 
-  // API helper that works with the new onboarding
+  // ---- fetch timeout (bounded requests) --------------------------------
+  const FETCH_TIMEOUT_MS = 15000;
+
+  async function withTimeout(promiseFactory, ms = FETCH_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ms);
+    try {
+      const result = await promiseFactory(controller.signal);
+      return result;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async function apiPost(path, body) {
     const headers = { "Content-Type": "application/json" };
     if (state.token) headers["Authorization"] = "Bearer " + state.token;
-    const resp = await fetch(path, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
+    const resp = await withTimeout((signal) =>
+      fetch(path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal,
+      })
+    );
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || data.detail || "Request failed");
     return data;
@@ -393,7 +409,7 @@
   }
 
   async function getJson(path) {
-    const res = await fetch(path);
+    const res = await withTimeout((signal) => fetch(path, { signal }));
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }
@@ -1813,7 +1829,7 @@
   async function loadBtcPuzzleList() {
     const list = el("btc-puzzle-list");
     try {
-      const resp = await apiGet("/api/puzzles/bitcoin-puzzle");
+      const resp = await getJson("/api/puzzles/bitcoin-puzzle");
       if (resp.known_puzzles && resp.known_puzzles.length > 0) {
         let html = '';
         for (const p of resp.known_puzzles) {
@@ -1863,8 +1879,17 @@
   async function loadMonitorStatus() {
     const el2 = el("monitor-status");
     try {
-      const resp = await apiGet("/api/status");
-      el2.innerHTML = `<p>Watching <b>${resp.chains ? resp.chains.length : 0}</b> chains</p>`;
+      const [chainsResp, statusResp] = await Promise.all([
+        getJson("/api/chains"),
+        getJson("/api/status"),
+      ]);
+      const chainCount = chainsResp.chains ? chainsResp.chains.length : 0;
+      const statuses = statusResp.statuses || {};
+      const statusList = Object.entries(statuses)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(", ");
+      el2.innerHTML = `<p>Watching <b>${chainCount}</b> chains</p>`;
+      el2.innerHTML += `<p class="muted">Subsystems: ${statusList}</p>`;
       el2.innerHTML += '<p class="muted">Puzzle monitoring is offline. Run <code>python3 -m app.monitor</code> to enable.</p>';
     } catch (err) {
       el2.innerHTML = `<p class="muted">${err.message}</p>`;

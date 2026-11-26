@@ -29,6 +29,14 @@ from .errors import NonceError, SignatureError
 
 DOMAIN = "hermes-bot-miniapp"
 
+#: Password hashing: scrypt is memory-hard and resistant to GPU/ASIC cracking.
+#: SHA-256 hashes are still accepted for backward compatibility and are
+#: re-hashed to scrypt on the next successful login.
+SCRYPT_N = 2 ** 14
+SCRYPT_R = 8
+SCRYPT_P = 1
+SCRYPT_KEYLEN = 32
+
 CHALLENGE_TEMPLATE = (
     "{domain} authentication\n"
     "Address: {address}\n"
@@ -183,9 +191,60 @@ SESSION_TTL_SECONDS = 86400  # 24 hours
 
 
 def _hash_password(password: str, salt: str = "") -> str:
-    """Hash a password with SHA-256 (salted with domain + user salt)."""
+    """Hash a password with scrypt (salted with domain + user salt).
+
+    Returns a portable string ``$scrypt$N=$n:r=$r:p=$p$salt=$hexsalt$hexhash``
+    so legacy SHA-256 hashes can be detected and migrated on next login.
+    """
+    if not salt:
+        salt = secrets.token_hex(16)
+    dk = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt.encode("utf-8"),
+        n=SCRYPT_N,
+        r=SCRYPT_R,
+        p=SCRYPT_P,
+        dklen=SCRYPT_KEYLEN,
+    )
+    return (
+        f"$scrypt$N={SCRYPT_N}:r={SCRYPT_R}:p={SCRYPT_P}"
+        f"$salt={salt}$"
+        f"{dk.hex()}"
+    )
+
+
+def _hash_password_sha256(password: str, salt: str = "") -> str:
+    """Legacy SHA-256 password hash (kept for backward compatibility)."""
     salted = f"{DOMAIN}:{salt}:{password}"
     return hashlib.sha256(salted.encode("utf-8")).hexdigest()
+
+
+def _verify_password(password: str, stored: str, salt: str = "") -> bool:
+    """Verify a password against a stored hash (scrypt or legacy SHA-256).
+
+    Returns True on match. Legacy SHA-256 hashes are detected by the absence
+    of the ``$scrypt$`` prefix.
+    """
+    if not stored:
+        return False
+    if stored.startswith("$scrypt$"):
+        try:
+            _, params, _, salt_hexpart, hexhash = stored.split("$", 4)
+            salt = salt_hexpart.split("=", 1)[1] if "=" in salt_hexpart else salt_hexpart
+            expected = hexhash
+            dk = hashlib.scrypt(
+                password.encode("utf-8"),
+                salt=salt.encode("utf-8"),
+                n=SCRYPT_N,
+                r=SCRYPT_R,
+                p=SCRYPT_P,
+                dklen=SCRYPT_KEYLEN,
+            )
+            return hmac.compare_digest(dk.hex(), expected)
+        except (ValueError, IndexError):
+            return False
+    # Legacy SHA-256 hash: compare directly using the supplied salt
+    return hmac.compare_digest(_hash_password_sha256(password, salt), stored)
 
 
 def _load_users() -> Dict[str, Any]:
@@ -319,8 +378,17 @@ def authenticate_user(email: str, password: str) -> Dict[str, Any]:
     salt = user.get("salt", "")
     stored_hash = user.get("password_hash", "")
 
-    if _hash_password(password, salt) != stored_hash:
+    if not _verify_password(password, stored_hash, salt):
         raise SignatureError("invalid email or password")
+
+    # Backward-compatible migration: re-hash legacy SHA-256 passwords to scrypt.
+    if not stored_hash.startswith("$scrypt$"):
+        salt = secrets.token_hex(16)
+        user["salt"] = salt
+        user["password_hash"] = _hash_password(password, salt)
+        user["password_migrated_at"] = datetime.now(timezone.utc).isoformat()
+        users[user_id] = user
+        _save_users(users)
 
     issuer = SessionIssuer()
     token, expires = issuer.issue(user_id)
