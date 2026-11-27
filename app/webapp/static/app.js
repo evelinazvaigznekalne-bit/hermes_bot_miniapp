@@ -292,22 +292,28 @@
   }
 
   async function apiPost(path, body) {
-    const headers = { "Content-Type": "application/json" };
-    if (state.token) headers["Authorization"] = "Bearer " + state.token;
-    const resp = await withTimeout((signal) =>
-      fetch(path, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal,
-      })
-    );
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || data.detail || "Request failed");
-    return data;
+      const headers = { "Content-Type": "application/json" };
+      if (state.token) headers["Authorization"] = "Bearer " + state.token;
+      const resp = await withTimeout((signal) =>
+        fetch(path, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal,
+        })
+      );
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || data.detail || "Request failed");
+      return data;
   }
 
-  const PILL = (status, text) =>
+  async function apiGet(path) {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+
+  const PILL
     `<span class="pill ${status === "✓" ? "ok" : status === "✗" ? "fail" : "pending"}">` +
     `${status} ${text}</span>`;
 
@@ -1829,7 +1835,7 @@
   async function loadBtcPuzzleList() {
     const list = el("btc-puzzle-list");
     try {
-      const resp = await getJson("/api/puzzles/bitcoin-puzzle");
+      const resp = await apiGet("/api/puzzles/bitcoin-puzzle");
       if (resp.known_puzzles && resp.known_puzzles.length > 0) {
         let html = '';
         for (const p of resp.known_puzzles) {
@@ -1880,8 +1886,8 @@
     const el2 = el("monitor-status");
     try {
       const [chainsResp, statusResp] = await Promise.all([
-        getJson("/api/chains"),
-        getJson("/api/status"),
+        apiGet("/api/chains"),
+        apiGet("/api/status"),
       ]);
       const chainCount = chainsResp.chains ? chainsResp.chains.length : 0;
       const statuses = statusResp.statuses || {};
